@@ -24,6 +24,36 @@ char* next_token(char** tokenizer, message_status* status) {
     return token;
 }
 
+message_status parse_create_col(char* create_arguments) {
+    message_status status = OK_DONE;
+    char** create_arguments_index = &create_arguments;
+    char* col_name = next_token(create_arguments_index, &status);
+    char* db_tbl_name = next_token(create_arguments_index, &status);
+
+    col_name = trim_quotes(col_name);
+    // not enough arguments
+    if (status == INCORRECT_FORMAT) {
+        return status;
+    }
+
+    int last_char = strlen(db_tbl_name) - 1;
+    if (db_tbl_name[last_char] != ')') {
+        return INCORRECT_FORMAT;
+    }
+    db_tbl_name[last_char] = '\0';
+
+    char* db_Name = strsep(&db_tbl_name, ".");
+    char* table_name = db_tbl_name;
+
+    Table* table = lookup_table(table_name);
+    if (table == NULL) {
+        status = OBJECT_NOT_FOUND;
+
+    }
+
+    return status;
+}
+
 /**
  * This method takes in a string representing the arguments to create a table.
  * It parses those arguments, checks that they are valid, and creates a table.
@@ -92,7 +122,12 @@ message_status parse_create_db(char* create_arguments) {
         if (token != NULL) {
             return INCORRECT_FORMAT;
         }
-        if (add_db(db_name, true).code == OK) {
+
+        Status ret_Status;
+        ret_Status.code = ERROR;
+
+        add_db(db_name, true, &ret_Status);
+        if (ret_Status.code != ERROR) {
             return OK_DONE;
         } else {
             return EXECUTION_ERROR;
@@ -120,6 +155,8 @@ message_status parse_create(char* create_arguments) {
                 mes_status = parse_create_db(tokenizer_copy);
             } else if (strcmp(token, "tbl") == 0) {
                 mes_status = parse_create_tbl(tokenizer_copy);
+            } else if (strcmp(token, "col") == 0) {
+                mes_status = parse_create_col(tokenizer_copy);
             } else {
                 mes_status = UNKNOWN_COMMAND;
             }
@@ -175,6 +212,40 @@ DbOperator* parse_insert(char* query_command, message* send_message) {
     }
 }
 
+void parse_load(char* query_command, message* send_message) {
+    if (strncmp(query_command, "(", 1) == 0) {
+        char* filePathWithQuotes = trim_parenthesis(query_command);
+        if(filePathWithQuotes == NULL){
+            send_message->status = INCORRECT_FORMAT;
+            return;
+        }
+        else{
+            message_status status = OK_DONE;
+            char* filePath = trim_quotes(filePathWithQuotes);
+            FILE* fd = fopen(filePath, "r");
+            if(fd != NULL){
+                char buf[1024]; //TO CHECK: If buffer size if enough?
+                while (fgets(buf, 1024, fd))
+                {
+                    char* tmp = strdup(buf);
+                    char* val = NULL;
+                    while( (val = next_token(&tmp, &status)) != NULL){
+
+                    }
+                }
+            }
+            else{
+                cs165_log(stdout, "File could not be opened");
+                send_message->status = FILE_NOT_FOUND;
+                return;
+            }
+        }
+    }
+    else{
+        send_message->status = UNKNOWN_COMMAND;
+        return;
+    }
+}
 /**
  * parse_command takes as input the send_message from the client and then
  * parses it into the appropriate query. Stores into send_message the

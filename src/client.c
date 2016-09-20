@@ -1,4 +1,5 @@
 #define _XOPEN_SOURCE
+#define _BSD_SOURCE
 /**
  * client.c
  *  CS165 Fall 2015
@@ -32,7 +33,7 @@
  * This sets up the connection on the client side using unix sockets.
  * Returns a valid client socket fd on success, else -1 on failure.
  *
- **/
+ **/   
 int connect_client() {
     int client_socket;
     size_t len;
@@ -96,6 +97,96 @@ int main(void)
         // payload directly to the server.
         send_message.length = strlen(read_buffer);
         if (send_message.length > 1) {
+
+            if(strncmp(send_message.payload, "load", 4) == 0){
+                    char *temp, *tempToFree;
+                    tempToFree = temp = (char*)strdup(send_message.payload);
+                    temp += 4;
+                    if (strncmp(temp, "(", 1) == 0) {
+                    char* filePathWithQuotes = trim_parenthesis(temp);
+                    char* filePath = trim_quotes(filePathWithQuotes);
+                    int last_char = strlen(filePath) - 1;
+                    filePath[last_char] = '\0';
+
+                    message load_send_message;
+                    message load_recv_message;
+                    FILE* fd = fopen(filePath, "r");
+                    if(fd != NULL){
+                        char buf[1024]; //TO CHECK: If buffer size if enough?
+                        char table_Name[256];
+                        char query_insert[1024];
+                        memset(buf, '\0', 1024);
+                        memset(table_Name, '\0', 256);
+                        memset(query_insert, '\0', 1024);
+                        if(fgets(buf, 1024, fd))
+                        {
+                            char* tmp, *tmpToFree;
+                            tmp = tmpToFree = strdup(buf);
+                            char* tkdb = strsep(&tmp, ".");
+                            char* tktable = strsep(&tmp, ".");
+                            strcat(table_Name, tkdb);
+                            strcat(table_Name, ".");
+                            strcat(table_Name, tktable);
+                            strcat(query_insert, "relational_insert(");
+                            strcat(query_insert, table_Name);
+                            strcat(query_insert, ",");
+                            free(tmpToFree);
+                        }
+                        while (fgets(buf, 512, fd))
+                        {
+                            char* tmp;
+                            tmp = strdup(buf);
+                            strcat(query_insert, tmp);
+                            strcat(query_insert, ")");
+
+                            load_send_message.payload = query_insert;
+                            load_send_message.length = strlen(query_insert);
+                            if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
+                                log_err("Failed to send message header.");
+                                exit(1);
+                            }
+
+                            // Send the payload (query) to server
+                            if (send(client_socket, load_send_message.payload, load_send_message.length, 0) == -1) {
+                                log_err("Failed to send query payload.");
+                                exit(1);
+                            }
+
+                            // Always wait for server response (even if it is just an OK message)
+                            if ((len = recv(client_socket, &(load_recv_message), sizeof(message), 0)) > 0) {
+                                if (load_recv_message.status == OK_WAIT_FOR_RESPONSE &&
+                                    (int) load_recv_message.length > 0) {
+                                    // Calculate number of bytes in response package
+                                    int num_bytes = (int) load_recv_message.length;
+                                    char payload[num_bytes + 1];
+
+                                    // Receive the payload and print it out
+                                    if ((len = recv(client_socket, payload, num_bytes, 0)) > 0) {
+                                        payload[num_bytes] = '\0';
+                                        printf("%s\n", payload);
+                                    }
+                                }
+                            }
+                            else {
+                                if (len < 0) {
+                                    log_err("Failed to receive message.");
+                                }
+                                else {
+                                    log_info("Server closed connection\n");
+                                }
+                                exit(1);
+                            }
+                            free(tmp);
+                            
+                        }
+                    }
+                    else{
+                        cs165_log(stdout, "File could not be opened");
+                    }    
+                    free(tempToFree); 
+            
+                }
+            }
             // Send the message_header, which tells server payload size
             if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
                 log_err("Failed to send message header.");

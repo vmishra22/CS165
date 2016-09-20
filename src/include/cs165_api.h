@@ -230,7 +230,7 @@ typedef struct DbOperator {
 } DbOperator;
 
 extern Db *current_db;
-
+ 
 Status db_startup();
 
 /**
@@ -242,7 +242,7 @@ Status db_startup();
  **/
 Status sync_db(Db* db);
 
-Status add_db(const char* db_name, bool new);
+void add_db(const char* db_name, bool new, Status *status);
 
 Table* create_table(Db* db, const char* name, size_t num_columns, Status *status);
 
