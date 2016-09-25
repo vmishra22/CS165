@@ -48,7 +48,9 @@ message_status parse_create_col(char* create_arguments) {
     Table* table = lookup_table(table_name);
     if (table == NULL) {
         status = OBJECT_NOT_FOUND;
-
+    }
+    else{
+        create_column(col_name, table, false, &status);
     }
 
     return status;
@@ -212,40 +214,6 @@ DbOperator* parse_insert(char* query_command, message* send_message) {
     }
 }
 
-void parse_load(char* query_command, message* send_message) {
-    if (strncmp(query_command, "(", 1) == 0) {
-        char* filePathWithQuotes = trim_parenthesis(query_command);
-        if(filePathWithQuotes == NULL){
-            send_message->status = INCORRECT_FORMAT;
-            return;
-        }
-        else{
-            message_status status = OK_DONE;
-            char* filePath = trim_quotes(filePathWithQuotes);
-            FILE* fd = fopen(filePath, "r");
-            if(fd != NULL){
-                char buf[1024]; //TO CHECK: If buffer size if enough?
-                while (fgets(buf, 1024, fd))
-                {
-                    char* tmp = strdup(buf);
-                    char* val = NULL;
-                    while( (val = next_token(&tmp, &status)) != NULL){
-
-                    }
-                }
-            }
-            else{
-                cs165_log(stdout, "File could not be opened");
-                send_message->status = FILE_NOT_FOUND;
-                return;
-            }
-        }
-    }
-    else{
-        send_message->status = UNKNOWN_COMMAND;
-        return;
-    }
-}
 /**
  * parse_command takes as input the send_message from the client and then
  * parses it into the appropriate query. Stores into send_message the
@@ -285,6 +253,8 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
     } else if (strncmp(query_command, "relational_insert", 17) == 0) {
         query_command += 17;
         dbo = parse_insert(query_command, send_message);
+    } else if (strncmp(query_command, "shutdown", 8) == 0) {
+        saveDatabse();
     }
     if (dbo == NULL) {
         return dbo;

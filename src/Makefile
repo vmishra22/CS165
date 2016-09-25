@@ -9,13 +9,14 @@ all: client server
 CC = gcc -std=c99 -g -ggdb3
 
 # Default optimization level
-O ?= 3
+O ?= 2
 
 # Flags and other libraries
 override CFLAGS += -Wall -Wextra -pedantic -pthread -O$(O) -I$(INCLUDES)
 LDFLAGS =
 LIBS =
 INCLUDES = include
+
 
 ####### Automatic dependency magic #######
 # Set-up dependency directory
@@ -63,5 +64,6 @@ clean:
 
 distclean: clean
 	rm -rf $(DEPSDIR)
+	rm -rf ../database
 
 .PHONY: all clean distclean

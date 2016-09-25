@@ -170,6 +170,8 @@ int main(void)
         exit(1);
     }
 
+    db_startup();
+
     handle_client(client_socket);
 
     return 0;

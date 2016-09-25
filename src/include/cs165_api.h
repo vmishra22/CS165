@@ -33,6 +33,10 @@ SOFTWARE.
 #define MAX_SIZE_NAME 64
 #define HANDLE_MAX_SIZE 64
 
+//Maximum number of tables in a database
+#define MAX_TABLE_SIZE 8
+//Maximum number of columns in a table
+#define MAX_COLUMN_SIZE 16
 /**
  * EXTRA
  * DataType
@@ -228,6 +232,20 @@ typedef struct DbOperator {
     int client_fd;
     ClientContext* context;
 } DbOperator;
+
+
+
+typedef struct Catalog
+{
+    char dbName[MAX_SIZE_NAME];
+    int numTables;
+    int numTableCapacity;
+    char tableNames[MAX_TABLE_SIZE] [MAX_SIZE_NAME];
+    int numTableColumns[MAX_TABLE_SIZE];
+    int columnSize[MAX_TABLE_SIZE];
+    char columnNames[MAX_TABLE_SIZE][MAX_COLUMN_SIZE][MAX_SIZE_NAME];
+}Catalog;
+
 
 extern Db *current_db;
  
