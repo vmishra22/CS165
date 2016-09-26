@@ -48,6 +48,8 @@ Table* create_table(Db* db, const char* name, size_t num_columns, Status *ret_st
 		//Check if the directory for table exists in the database.
 		char tablePath[128];
 		strcpy(tablePath, "../database/");
+		strcat(tablePath, db->name);
+		strcat(tablePath, "/");
 		strcat(tablePath, name);
 		DIR* dir = opendir(tablePath);
 		if (dir){
@@ -77,6 +79,21 @@ void add_db(const char* db_name, bool new, Status* status) {
 		current_db->tables_size = 0;
 		current_db->tables_capacity = 100;  //For now, num of max tables are 100
 		current_db->tables = NULL;
+
+		char dbPath[128];
+		strcpy(dbPath, "../database/");
+		strcat(dbPath, db_name);
+		DIR* dir = opendir(dbPath);
+		if (dir){
+		    closedir(dir);
+		}
+		else if (ENOENT == errno){
+			int retStatus;
+			retStatus = mkdir(dbPath, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+			if(retStatus == -1){
+				status->code = ERROR;
+			}
+		}
 		status->code = OK;
 	}
 }
@@ -165,12 +182,38 @@ Status saveDatabse(){
 	catalog.numTables = current_db->tables_size;
 	catalog.numTableCapacity = current_db->tables_capacity;  
 	for(i=0; i<(current_db->tables_size); i++){
-		strcpy(catalog.tableNames[i], current_db->tables[i].name);
+		char* tableName = current_db->tables[i].name;
+		strcpy(catalog.tableNames[i], tableName);
 		int numTableColumns = current_db->tables[i].col_count;
 		catalog.numTableColumns[i] = numTableColumns;
-		catalog.columnSize[i] = current_db->tables[i].table_length;
+		int tableLength = current_db->tables[i].table_length;
+		catalog.columnSize[i] = tableLength;
+
+		char tablePath[256];
+		strcpy(tablePath, "../database/");
+		strcat(tablePath, current_db->name);
+		strcat(tablePath, "/");
+		strcat(tablePath, tableName);
+		strcat(tablePath, "/");
+
 		for(j=0; j<numTableColumns; j++){
-			strcpy(catalog.columnNames[i][j], (current_db->tables[i]).columns[j].name);
+			Column column = (current_db->tables[i]).columns[j];
+			char* colName = column.name;
+			strcpy(catalog.columnNames[i][j], colName);
+			FILE *ptr_column;
+
+			char colPath[256];
+			strcpy(colPath, tablePath);
+			strcat(colPath, colName);
+			ptr_column=fopen(colPath, "wb");
+
+			if(!ptr_column){
+				ret_status.code ==  ERROR;
+				return ret_status;
+			}
+
+			fwrite(column.data, sizeof(int), tableLength, ptr_column);
+			fclose(ptr_column);
 		}
 	}
 

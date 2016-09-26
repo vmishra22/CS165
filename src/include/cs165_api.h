@@ -272,6 +272,7 @@ Status shutdown_database(Db* db);
 char** execute_db_operator(DbOperator* query);
 void db_operator_free(DbOperator* query);
 
+void execute_DbOperator(DbOperator* query);
 
 #endif /* CS165_H */
 

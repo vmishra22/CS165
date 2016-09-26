@@ -181,7 +181,11 @@ DbOperator* parse_insert(char* query_command, message* send_message) {
     if (strncmp(query_command, "(", 1) == 0) {
         query_command++;
         char** command_index = &query_command;
-        char* table_name = next_token(command_index, &send_message->status);
+        char* db_tbl_name = next_token(command_index, &send_message->status);
+
+        char* db_Name = strsep(&db_tbl_name, ".");
+        char* table_name = db_tbl_name;
+
         if (send_message->status == INCORRECT_FORMAT) {
             return NULL;
         }

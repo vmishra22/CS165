@@ -35,9 +35,38 @@
  * This should be replaced in your implementation (and its implementation possibly moved to a different file).
  * It is currently here so that you can verify that your server and client can send messages.
  **/
-char* execute_DbOperator(DbOperator* query) {
+void execute_DbOperator(DbOperator* query) {
+    
+
+    if(!query)
+        return;
+
+    size_t i;
+    char insertMsg[] = "Insert Operation Succeeded";
+    Table* table = NULL;
+    Column* column = NULL;
+    switch(query->type){
+        case INSERT: 
+            table = query->operator_fields.insert_operator.table;
+            (table->table_length)++;
+            int columnSize = table->table_length;
+            for(i=0; i<(table->col_count); i++){
+                column = &(table->columns[i]);
+                column->data = (int*)realloc(column->data, (columnSize) * sizeof(int));
+                column->data[columnSize-1] = query->operator_fields.insert_operator.values[i];
+            }
+           
+            break;
+        case CREATE:
+            break;
+        case OPEN:
+            break;
+
+    }
+    if(query->operator_fields.insert_operator.values != NULL)
+        free(query->operator_fields.insert_operator.values);
     free(query);
-    return "165";
+    return;
 }
 
 /**
@@ -82,8 +111,12 @@ void handle_client(int client_socket) {
             DbOperator* query = parse_command(recv_message.payload, &send_message, client_socket, client_context);
 
             // 2. Handle request
-            char* result = execute_DbOperator(query);
-            send_message.length = strlen(result);
+            execute_DbOperator(query);
+
+            char retMessage[] = "Received";
+            //free(result);
+            
+            send_message.length = strlen(retMessage);
 
             // 3. Send status of the received message (OK, UNKNOWN_QUERY, etc)
             if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
@@ -92,7 +125,7 @@ void handle_client(int client_socket) {
             }
 
             // 4. Send response of request
-            if (send(client_socket, result, send_message.length, 0) == -1) {
+            if (send(client_socket, retMessage, send_message.length, 0) == -1) {
                 log_err("Failed to send message.");
                 exit(1);
             }
