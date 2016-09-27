@@ -84,6 +84,7 @@ typedef struct Table {
     Column *columns;
     size_t col_count;
     size_t table_length;
+    size_t col_data_capacity;
 } Table;
 
 /**
@@ -238,11 +239,12 @@ typedef struct DbOperator {
 typedef struct Catalog
 {
     char dbName[MAX_SIZE_NAME];
-    int numTables;
-    int numTableCapacity;
+    size_t numTables;
+    size_t numTableCapacity;
     char tableNames[MAX_TABLE_SIZE] [MAX_SIZE_NAME];
-    int numTableColumns[MAX_TABLE_SIZE];
-    int columnSize[MAX_TABLE_SIZE];
+    size_t numTableColumns[MAX_TABLE_SIZE];
+    size_t columnSize[MAX_TABLE_SIZE];
+    size_t columnDataCapacity[MAX_TABLE_SIZE];
     char columnNames[MAX_TABLE_SIZE][MAX_COLUMN_SIZE][MAX_SIZE_NAME];
 }Catalog;
 
@@ -268,11 +270,12 @@ Column* create_column(char *name, Table *table, bool sorted, Status *ret_status)
 
 Status shutdown_server();
 Status shutdown_database(Db* db);
+Status saveDatabase();
 
 char** execute_db_operator(DbOperator* query);
 void db_operator_free(DbOperator* query);
 
-void execute_DbOperator(DbOperator* query);
+void execute_DbOperator(DbOperator* query, char** msg);
 
 #endif /* CS165_H */
 

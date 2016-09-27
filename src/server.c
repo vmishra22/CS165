@@ -35,9 +35,10 @@
  * This should be replaced in your implementation (and its implementation possibly moved to a different file).
  * It is currently here so that you can verify that your server and client can send messages.
  **/
-void execute_DbOperator(DbOperator* query) {
+void execute_DbOperator(DbOperator* query, char** msg) {
     
-
+    char defaultMsg[] = "Blank Operation Succeeded";
+    strcpy(*msg, defaultMsg);
     if(!query)
         return;
 
@@ -49,11 +50,19 @@ void execute_DbOperator(DbOperator* query) {
         case INSERT: 
             table = query->operator_fields.insert_operator.table;
             (table->table_length)++;
-            int columnSize = table->table_length;
-            for(i=0; i<(table->col_count); i++){
+            size_t columnSize = table->table_length;
+            
+            size_t numColumns = table->col_count;
+            for(i=0; i<numColumns; i++){
                 column = &(table->columns[i]);
-                column->data = (int*)realloc(column->data, (columnSize) * sizeof(int));
+                if(columnSize == table->col_data_capacity){
+                    table->col_data_capacity *= 2; 
+                    column->data = (int*)realloc(column->data, (table->col_data_capacity) * sizeof(int));
+                }
                 column->data[columnSize-1] = query->operator_fields.insert_operator.values[i];
+                char str[64];
+                sprintf(str, "%s %zu", insertMsg, columnSize);
+                strcpy(*msg, str);
             }
            
             break;
@@ -111,10 +120,13 @@ void handle_client(int client_socket) {
             DbOperator* query = parse_command(recv_message.payload, &send_message, client_socket, client_context);
 
             // 2. Handle request
-            execute_DbOperator(query);
+            char* payload_to_client = (char*)malloc(64);
+            memset(payload_to_client, '\0', 64);
+            execute_DbOperator(query, &payload_to_client);
 
-            char retMessage[] = "Received";
-            //free(result);
+            char retMessage[64];
+            strcpy(retMessage, payload_to_client);
+            free(payload_to_client);
             
             send_message.length = strlen(retMessage);
 

@@ -12,12 +12,15 @@
 Db *current_db;
 
 Column* create_column(char *name, Table *table, bool sorted, Status *ret_status){
+	(void) sorted;
 	Column* column = NULL;
-	int i=0;
-	for(i=0; i<(table->col_count); i++){
+	size_t i=0;
+	size_t numColumns = table->col_count;
+	for(i=0; i<numColumns; i++){
 		if(strcmp(table->columns[i].name, "") == 0){
 			strcpy(table->columns[i].name, name);
 			column = &(table->columns[i]);
+			column->data = (int*)malloc(sizeof(int) * (table->col_data_capacity));
 			break;
 		}
 	}
@@ -27,42 +30,44 @@ Column* create_column(char *name, Table *table, bool sorted, Status *ret_status)
 }
 
 Table* create_table(Db* db, const char* name, size_t num_columns, Status *ret_status) {
-	int i=0;
+	size_t i=0;
 	
-	if(db->tables_size < db->tables_capacity){
-		//table = (Table*)malloc(sizeof(Table));
-		(db->tables_size)++;
-		db->tables = (Table*)realloc(db->tables, db->tables_size);
-		int tableIndex = (db->tables_size)-1;
-		Table* table = &(db->tables[tableIndex]);
-		strcpy(table->name, name);
-		table->columns = (Column*)malloc(sizeof(Column)*num_columns);
-		for(i=0; i<num_columns; i++){
-			strcpy(table->columns[i].name, "");
-		}
-		table->col_count = num_columns;
-		table->table_length = 0;
-		
-		ret_status->code=OK;
+	if(db->tables_size == db->tables_capacity){
+		db->tables_capacity *= 2; 
+		db->tables = (Table*)realloc(db->tables, (db->tables_capacity) * sizeof(Table));
+	}
+	(db->tables_size)++;
+	int tableIndex = (db->tables_size)-1;
+	Table* table = &(db->tables[tableIndex]);
+	strcpy(table->name, name);
+	table->columns = (Column*)malloc(sizeof(Column)*num_columns);
+	for(i=0; i<num_columns; i++){
+		strcpy(table->columns[i].name, "");
+	}
+	table->col_count = num_columns;
+	table->col_data_capacity = 200;
+	table->table_length = 0;
+	
+	ret_status->code=OK;
 
-		//Check if the directory for table exists in the database.
-		char tablePath[128];
-		strcpy(tablePath, "../database/");
-		strcat(tablePath, db->name);
-		strcat(tablePath, "/");
-		strcat(tablePath, name);
-		DIR* dir = opendir(tablePath);
-		if (dir){
-		    closedir(dir);
-		}
-		else if (ENOENT == errno){
-			int status;
-			status = mkdir(tablePath, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-			if(status == -1){
-				ret_status->code = ERROR;
-			}
+	//Check if the directory for table exists in the database.
+	char tablePath[128];
+	strcpy(tablePath, "../database/");
+	strcat(tablePath, db->name);
+	strcat(tablePath, "/");
+	strcat(tablePath, name);
+	DIR* dir = opendir(tablePath);
+	if (dir){
+	    closedir(dir);
+	}
+	else if (ENOENT == errno){
+		int status;
+		status = mkdir(tablePath, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+		if(status == -1){
+			ret_status->code = ERROR;
 		}
 	}
+	
 	
 	return &(db->tables[(db->tables_size)-1]);
 }
@@ -76,9 +81,9 @@ void add_db(const char* db_name, bool new, Status* status) {
 
 		current_db = (Db*)malloc(sizeof(Db));
 		strcpy(current_db->name, db_name);
+		current_db->tables_capacity = 10;  //For now, num of max tables are 10
+		current_db->tables = (Table*)malloc((current_db->tables_capacity) * sizeof(Table));
 		current_db->tables_size = 0;
-		current_db->tables_capacity = 100;  //For now, num of max tables are 100
-		current_db->tables = NULL;
 
 		char dbPath[128];
 		strcpy(dbPath, "../database/");
@@ -103,7 +108,8 @@ Status db_startup(){
 	ret_status.code = OK;
 	bool isNewDir = false;
 	Catalog catalog;
-	int i, j;
+	size_t i;
+	int j;
 	memset(&(catalog.dbName), '\0', MAX_SIZE_NAME);
 
 
@@ -135,46 +141,52 @@ Status db_startup(){
 	ptr_catalog=fopen("../database/catalog.bin","r+b");
 
 	if(!ptr_catalog){
-		ret_status.code ==  ERROR;
+		ret_status.code = ERROR;
 		return ret_status;
 	}
 
-	size_t rCount = fread(&catalog,sizeof(Catalog),1,ptr_catalog);
+	size_t readVals = fread(&catalog,sizeof(Catalog),1,ptr_catalog);
+	(void) readVals;
 
 	//read from the catalog and initialized local data
 	current_db = (Db*)malloc(sizeof(Db));
 	strcpy(current_db->name, catalog.dbName);
 	current_db->tables_size = catalog.numTables;
 	current_db->tables_capacity = catalog.numTableCapacity;  //For now, num of max tables are 100
-	current_db->tables = (Table*)malloc(sizeof(Table)*(catalog.numTables));
+	current_db->tables = (Table*)malloc(sizeof(Table)*(catalog.numTableCapacity));
 	for(i=0; i<(current_db->tables_size); i++){
+		Table* table = &(current_db->tables[i]);
 		//Table name
-		strcpy((current_db->tables[i]).name, catalog.tableNames[i]);
+		strcpy(table->name, catalog.tableNames[i]);
 		//Number of Columns
 		int numTabColumns = catalog.numTableColumns[i];
-		current_db->tables[i].col_count = numTabColumns;
+		table->col_count = numTabColumns;
 		//Column size
-		current_db->tables[i].table_length = catalog.columnSize[i];
-		(current_db->tables[i]).columns = (Column*)malloc(sizeof(Column)*numTabColumns);
+		table->table_length = catalog.columnSize[i];
+		table->col_data_capacity = catalog.columnDataCapacity[i];
+		table->columns = (Column*)malloc(sizeof(Column)*numTabColumns);
 		for(j=0; j<numTabColumns; j++){
-			strcpy((current_db->tables[i]).columns[j].name, catalog.columnNames[i][j]);
+			Column* column = &(table->columns[j]);
+			strcpy(column->name, catalog.columnNames[i][j]);
+			column->data = (int*)malloc(sizeof(int) * (table->col_data_capacity));
 		}
 	}
 	fclose(ptr_catalog);
 	return ret_status;
 }
 
-Status saveDatabse(){
+Status saveDatabase(){
 	Status ret_status;
 	Catalog catalog;
-	int i, j;
+	size_t i;
+	int j;
 	ret_status.code = OK;
 
 	FILE *ptr_catalog;
 	ptr_catalog=fopen("../database/catalog.bin","wb");
 
 	if(!ptr_catalog){
-		ret_status.code ==  ERROR;
+		ret_status.code =  ERROR;
 		return ret_status;
 	}
 
@@ -182,12 +194,14 @@ Status saveDatabse(){
 	catalog.numTables = current_db->tables_size;
 	catalog.numTableCapacity = current_db->tables_capacity;  
 	for(i=0; i<(current_db->tables_size); i++){
-		char* tableName = current_db->tables[i].name;
+		Table* table = &(current_db->tables[i]);
+		char* tableName = table->name;
 		strcpy(catalog.tableNames[i], tableName);
-		int numTableColumns = current_db->tables[i].col_count;
+		int numTableColumns = table->col_count;
 		catalog.numTableColumns[i] = numTableColumns;
-		int tableLength = current_db->tables[i].table_length;
+		int tableLength = table->table_length;
 		catalog.columnSize[i] = tableLength;
+		catalog.columnDataCapacity[i] = table->col_data_capacity;
 
 		char tablePath[256];
 		strcpy(tablePath, "../database/");
@@ -197,8 +211,8 @@ Status saveDatabse(){
 		strcat(tablePath, "/");
 
 		for(j=0; j<numTableColumns; j++){
-			Column column = (current_db->tables[i]).columns[j];
-			char* colName = column.name;
+			Column* column = &(table->columns[j]);
+			char* colName = column->name;
 			strcpy(catalog.columnNames[i][j], colName);
 			FILE *ptr_column;
 
@@ -208,11 +222,11 @@ Status saveDatabse(){
 			ptr_column=fopen(colPath, "wb");
 
 			if(!ptr_column){
-				ret_status.code ==  ERROR;
+				ret_status.code =  ERROR;
 				return ret_status;
 			}
 
-			fwrite(column.data, sizeof(int), tableLength, ptr_column);
+			fwrite(column->data, sizeof(int), tableLength, ptr_column);
 			fclose(ptr_column);
 		}
 	}

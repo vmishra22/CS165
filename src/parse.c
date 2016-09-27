@@ -42,7 +42,7 @@ message_status parse_create_col(char* create_arguments) {
     }
     db_tbl_name[last_char] = '\0';
 
-    char* db_Name = strsep(&db_tbl_name, ".");
+    strsep(&db_tbl_name, ".");
     char* table_name = db_tbl_name;
 
     Table* table = lookup_table(table_name);
@@ -50,7 +50,12 @@ message_status parse_create_col(char* create_arguments) {
         status = OBJECT_NOT_FOUND;
     }
     else{
-        create_column(col_name, table, false, &status);
+        Status create_col_status;
+        create_column(col_name, table, false, &create_col_status);
+        if (create_col_status.code != OK) {
+            cs165_log(stdout, "adding a table failed.");
+            return EXECUTION_ERROR;
+        }
     }
 
     return status;
@@ -183,7 +188,7 @@ DbOperator* parse_insert(char* query_command, message* send_message) {
         char** command_index = &query_command;
         char* db_tbl_name = next_token(command_index, &send_message->status);
 
-        char* db_Name = strsep(&db_tbl_name, ".");
+        strsep(&db_tbl_name, ".");
         char* table_name = db_tbl_name;
 
         if (send_message->status == INCORRECT_FORMAT) {
@@ -211,6 +216,7 @@ DbOperator* parse_insert(char* query_command, message* send_message) {
             free (dbo);
             return NULL;
         } 
+        //send_message->status = OK_DONE;
         return dbo;
     } else {
         send_message->status = UNKNOWN_COMMAND;
@@ -258,7 +264,12 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         query_command += 17;
         dbo = parse_insert(query_command, send_message);
     } else if (strncmp(query_command, "shutdown", 8) == 0) {
-        saveDatabse();
+        Status ret_status;
+        ret_status = saveDatabase();
+        if(ret_status.code != ERROR)
+            send_message->status = OK_DONE;
+        else
+            send_message->status = EXECUTION_ERROR;
     }
     if (dbo == NULL) {
         return dbo;

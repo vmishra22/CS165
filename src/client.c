@@ -94,31 +94,36 @@ void parse_load_query(char* loadQuery, int client_socket){
                 free(tmpToFree);
             }
             memset(buf, '\0', 1024);
+            char newQueryInsert[1024];
             while (fgets(buf, 512, fd))
             {
-                char* tmp, *tmpToFree;
-                tmp = tmpToFree = strdup(buf);
-                char* tmptk = strsep(&tmp, "\n");
+                char *tempStr1, *tempStr1ToFree;
+                tempStr1 = tempStr1ToFree = strdup(buf);
+                char* tmptk = strsep(&tempStr1, "\n");
 
-                char* newQueryInsert = strdup(query_insert);
+                memset(newQueryInsert, '\0', 1024);
+                strcat(newQueryInsert, query_insert);
                 strcat(newQueryInsert, tmptk);
                 strcat(newQueryInsert, ")\n");
+                free(tempStr1ToFree);
 
-                load_send_message.payload = newQueryInsert;
-                load_send_message.length = strlen(newQueryInsert);
+                char payload[DEFAULT_STDIN_BUFFER_SIZE];
+                strcpy(payload, newQueryInsert);
+                load_send_message.length = strlen(payload);
+
+                
                 if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
                     log_err("Failed to send message header.");
                     exit(1);
                 }
 
                 // Send the payload (query) to server
-                if (send(client_socket, load_send_message.payload, load_send_message.length, 0) == -1) {
+                if (send(client_socket, payload, load_send_message.length, 0) == -1) {
                     log_err("Failed to send query payload.");
                     exit(1);
                 }
 
-                free(newQueryInsert);
-                free(tmpToFree);
+                
                 // Always wait for server response (even if it is just an OK message)
                 if ((len = recv(client_socket, &(load_recv_message), sizeof(message), 0)) > 0) {
                     if (load_recv_message.status == OK_WAIT_FOR_RESPONSE &&
@@ -188,6 +193,7 @@ int main(void)
             break;
         }
 
+        cs165_log(stdout, output_str);
         // Only process input that is greater than 1 character.
         // Ignore things such as new lines.
         // Otherwise, convert to message and send the message and the
@@ -238,6 +244,7 @@ int main(void)
             }
         }
     }
+    log_info("End of Main Client Socket Closed\n");
     close(client_socket);
     return 0;
 }
