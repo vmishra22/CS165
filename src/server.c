@@ -98,6 +98,7 @@ void handle_client(int client_socket) {
 
     // create the client context here
     ClientContext* client_context = NULL;
+    send_message.status = OK_WAIT_FOR_RESPONSE;
 
     // Continually receive messages from client and execute queries.
     // 1. Parse the command
@@ -120,7 +121,8 @@ void handle_client(int client_socket) {
             recv_message.payload[recv_message.length] = '\0';
 
             // 1. Parse command
-            DbOperator* query = parse_command(recv_message.payload, &send_message, client_socket, client_context);
+            DbOperator* query = NULL;
+            query = parse_command(recv_message.payload, &send_message, client_socket, client_context);
 
             // 2. Handle request
             char* payload_to_client = (char*)malloc(1024);
@@ -134,6 +136,7 @@ void handle_client(int client_socket) {
 
             cs165_log(stdout, retMessage);
             send_message.length = strlen(retMessage);
+            send_message.payload = NULL;
 
             // 3. Send status of the received message (OK, UNKNOWN_QUERY, etc)
             if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {

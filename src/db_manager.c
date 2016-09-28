@@ -182,6 +182,8 @@ Status saveDatabase(){
 	int j;
 	ret_status.code = OK;
 
+	memset(&catalog, 0, sizeof(Catalog));
+
 	FILE *ptr_catalog;
 	ptr_catalog=fopen("../database/catalog.bin","wb");
 
