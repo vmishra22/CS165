@@ -60,10 +60,13 @@ void execute_DbOperator(DbOperator* query, char** msg) {
                     column->data = (int*)realloc(column->data, (table->col_data_capacity) * sizeof(int));
                 }
                 column->data[columnSize-1] = query->operator_fields.insert_operator.values[i];
-                char str[64];
-                sprintf(str, "%s %zu", insertMsg, columnSize);
-                strcpy(*msg, str);
+
             }
+            char str[128];
+            memset(str, '\0', 128);
+            sprintf(str, "%s Column Size: %zu, First Col value: %d\n",
+                     insertMsg, columnSize, query->operator_fields.insert_operator.values[0]);
+            strcpy(*msg, str);
            
             break;
         case CREATE:
@@ -120,14 +123,16 @@ void handle_client(int client_socket) {
             DbOperator* query = parse_command(recv_message.payload, &send_message, client_socket, client_context);
 
             // 2. Handle request
-            char* payload_to_client = (char*)malloc(64);
-            memset(payload_to_client, '\0', 64);
+            char* payload_to_client = (char*)malloc(1024);
+            memset(payload_to_client, '\0', 1024);
             execute_DbOperator(query, &payload_to_client);
 
-            char retMessage[64];
+
+            char retMessage[1024];
             strcpy(retMessage, payload_to_client);
             free(payload_to_client);
-            
+
+            cs165_log(stdout, retMessage);
             send_message.length = strlen(retMessage);
 
             // 3. Send status of the received message (OK, UNKNOWN_QUERY, etc)
@@ -136,7 +141,7 @@ void handle_client(int client_socket) {
                 exit(1);
             }
 
-            // 4. Send response of request
+            // 4. Send response of request            
             if (send(client_socket, retMessage, send_message.length, 0) == -1) {
                 log_err("Failed to send message.");
                 exit(1);

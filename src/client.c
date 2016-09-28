@@ -61,6 +61,7 @@ int connect_client() {
 void parse_load_query(char* loadQuery, int client_socket){
     char *temp, *tempToFree;
     tempToFree = temp = (char*)strdup(loadQuery);
+    //cs165_log(stdout, loadQuery);
     temp += 4;
     if (strncmp(temp, "(", 1) == 0) {
         char* filePathWithQuotes = trim_parenthesis(temp);
@@ -111,7 +112,8 @@ void parse_load_query(char* loadQuery, int client_socket){
                 strcpy(payload, newQueryInsert);
                 load_send_message.length = strlen(payload);
 
-                
+                cs165_log(stdout, payload);
+
                 if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
                     log_err("Failed to send message header.");
                     exit(1);
@@ -123,6 +125,7 @@ void parse_load_query(char* loadQuery, int client_socket){
                     exit(1);
                 }
 
+                //sleep(2);
                 
                 // Always wait for server response (even if it is just an OK message)
                 if ((len = recv(client_socket, &(load_recv_message), sizeof(message), 0)) > 0) {
@@ -130,12 +133,12 @@ void parse_load_query(char* loadQuery, int client_socket){
                         (int) load_recv_message.length > 0) {
                         // Calculate number of bytes in response package
                         int num_bytes = (int) load_recv_message.length;
-                        char payload[num_bytes + 1];
+                        char payloadRecv[num_bytes + 1];
 
                         // Receive the payload and print it out
-                        if ((len = recv(client_socket, payload, num_bytes, 0)) > 0) {
-                            payload[num_bytes] = '\0';
-                            printf("%s\n", payload);
+                        if ((len = recv(client_socket, payloadRecv, num_bytes, 0)) > 0) {
+                            payloadRecv[num_bytes] = '\0';
+                            printf("%s\n", payloadRecv);
                         }
                     }
                 }
@@ -151,6 +154,7 @@ void parse_load_query(char* loadQuery, int client_socket){
 
                 
             }
+            fclose(fd);
         }
         else{
             cs165_log(stdout, "File could not be opened");
@@ -216,7 +220,7 @@ int main(void)
                     log_err("Failed to send query payload.");
                     exit(1);
                 }
-
+ 
                 // Always wait for server response (even if it is just an OK message)
                 if ((len = recv(client_socket, &(recv_message), sizeof(message), 0)) > 0) {
                     if (recv_message.status == OK_WAIT_FOR_RESPONSE &&

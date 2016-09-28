@@ -56,6 +56,8 @@ message_status parse_create_col(char* create_arguments) {
             cs165_log(stdout, "adding a table failed.");
             return EXECUTION_ERROR;
         }
+        else
+            status = OK_WAIT_FOR_RESPONSE;
     }
 
     return status;
@@ -102,6 +104,8 @@ message_status parse_create_tbl(char* create_arguments) {
         cs165_log(stdout, "adding a table failed.");
         return EXECUTION_ERROR;
     }
+    else
+        status = OK_WAIT_FOR_RESPONSE;
 
     return status;
 }
@@ -135,7 +139,7 @@ message_status parse_create_db(char* create_arguments) {
 
         add_db(db_name, true, &ret_Status);
         if (ret_Status.code != ERROR) {
-            return OK_DONE;
+            return OK_WAIT_FOR_RESPONSE;
         } else {
             return EXECUTION_ERROR;
         }
@@ -216,7 +220,7 @@ DbOperator* parse_insert(char* query_command, message* send_message) {
             free (dbo);
             return NULL;
         } 
-        //send_message->status = OK_DONE;
+        send_message->status = OK_WAIT_FOR_RESPONSE;
         return dbo;
     } else {
         send_message->status = UNKNOWN_COMMAND;
@@ -234,7 +238,7 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
     DbOperator *dbo = NULL; // = malloc(sizeof(DbOperator)); // calloc?
 
     if (strncmp(query_command, "--", 2) == 0) {
-        send_message->status = OK_DONE;
+        send_message->status = OK_WAIT_FOR_RESPONSE;
         // COMMENT LINE! 
         return NULL;
     }
@@ -263,6 +267,7 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
     } else if (strncmp(query_command, "relational_insert", 17) == 0) {
         query_command += 17;
         dbo = parse_insert(query_command, send_message);
+
     } else if (strncmp(query_command, "shutdown", 8) == 0) {
         Status ret_status;
         ret_status = saveDatabase();
