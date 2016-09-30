@@ -68,7 +68,6 @@ Table* create_table(Db* db, const char* name, size_t num_columns, Status *ret_st
 		}
 	}
 	
-	
 	return &(db->tables[(db->tables_size)-1]);
 }
 
@@ -236,10 +235,19 @@ Status saveDatabase(){
 	//Write the data into the catalog file
 	fwrite(&catalog, sizeof(Catalog), 1, ptr_catalog);
 
+	fclose(ptr_catalog);
+	return ret_status;
+}
+
+Status shutdown_server(){
+	Status ret_status;
+	ret_status.code = OK;
+
+	size_t i, j;
 	//Free up the memory of data strcutures
 	for(i=0; i<(current_db->tables_size); i++){
 		Column* cols = current_db->tables[i].columns;
-		int numTableColumns = current_db->tables[i].col_count;
+		size_t numTableColumns = current_db->tables[i].col_count;
 		for(j=0; j<numTableColumns; j++){
 			int* colData = (current_db->tables[i]).columns[j].data;
 			if(colData != NULL)
@@ -250,6 +258,5 @@ Status saveDatabase(){
 	free(current_db->tables);
 	free(current_db);
 
-	fclose(ptr_catalog);
 	return ret_status;
 }

@@ -199,6 +199,9 @@ typedef enum OperatorType {
     CREATE,
     INSERT,
     OPEN,
+    SELECT, 
+    FETCH, 
+    PRINT
 } OperatorType;
 /*
  * necessary fields for insertion
@@ -208,17 +211,25 @@ typedef struct InsertOperator {
     int* values;
 } InsertOperator;
 /*
- * necessary fields for insertion
+ * necessary fields for Open
  */
 typedef struct OpenOperator {
     char* db_name;
 } OpenOperator;
+/*
+ * necessary fields for select
+ */
+typedef struct SelectOperator {
+    Comparator* comparator;
+    Table* table;
+} SelectOperator;
 /*
  * union type holding the fields of any operator
  */
 typedef union OperatorFields {
     InsertOperator insert_operator;
     OpenOperator open_operator;
+    SelectOperator select_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:

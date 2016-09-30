@@ -31,56 +31,6 @@
 
 #define DEFAULT_QUERY_BUFFER_SIZE 1024
 
-/** execute_DbOperator takes as input the DbOperator and executes the query.
- * This should be replaced in your implementation (and its implementation possibly moved to a different file).
- * It is currently here so that you can verify that your server and client can send messages.
- **/
-void execute_DbOperator(DbOperator* query, char** msg) {
-    
-    char defaultMsg[] = "Blank Operation Succeeded";
-    strcpy(*msg, defaultMsg);
-    if(!query)
-        return;
-
-    size_t i;
-    char insertMsg[] = "Insert Operation Succeeded";
-    Table* table = NULL;
-    Column* column = NULL;
-    switch(query->type){
-        case INSERT: 
-            table = query->operator_fields.insert_operator.table;
-            (table->table_length)++;
-            size_t columnSize = table->table_length;
-            
-            size_t numColumns = table->col_count;
-            for(i=0; i<numColumns; i++){
-                column = &(table->columns[i]);
-                if(columnSize == table->col_data_capacity){
-                    table->col_data_capacity *= 2; 
-                    column->data = (int*)realloc(column->data, (table->col_data_capacity) * sizeof(int));
-                }
-                column->data[columnSize-1] = query->operator_fields.insert_operator.values[i];
-
-            }
-            char str[128];
-            memset(str, '\0', 128);
-            sprintf(str, "%s Column Size: %zu, First Col value: %d\n",
-                     insertMsg, columnSize, query->operator_fields.insert_operator.values[0]);
-            strcpy(*msg, str);
-           
-            break;
-        case CREATE:
-            break;
-        case OPEN:
-            break;
-
-    }
-    if(query->operator_fields.insert_operator.values != NULL)
-        free(query->operator_fields.insert_operator.values);
-    free(query);
-    return;
-}
-
 /**
  * handle_client(client_socket)
  * This is the execution routine after a client has connected.
@@ -97,8 +47,17 @@ void handle_client(int client_socket) {
     message recv_message;
 
     // create the client context here
-    ClientContext* client_context = NULL;
+    ClientContext* client_context = NULL; //TO DO: There can be multiple clients connected to the server
     send_message.status = OK_WAIT_FOR_RESPONSE;
+
+    client_context = (ClientContext*)malloc(sizeof(ClientContext));
+    memset(client_context, 0, sizeof(ClientContext));
+    client_context->chandle_slots = 10;
+    client_context->chandles_in_use = 0;
+    GeneralizedColumnHandle* pColumnHandle = 
+        (GeneralizedColumnHandle*) malloc(sizeof(GeneralizedColumnHandle)*(client_context->chandle_slots));
+    memset(pColumnHandle, 0, sizeof(GeneralizedColumnHandle)*(client_context->chandle_slots));
+    client_context->chandle_table = pColumnHandle;
 
     // Continually receive messages from client and execute queries.
     // 1. Parse the command
@@ -128,8 +87,6 @@ void handle_client(int client_socket) {
             char* payload_to_client = (char*)malloc(1024);
             memset(payload_to_client, '\0', 1024);
             execute_DbOperator(query, &payload_to_client);
-
-
             char retMessage[1024];
             strcpy(retMessage, payload_to_client);
             free(payload_to_client);
@@ -152,6 +109,11 @@ void handle_client(int client_socket) {
         }
     } while (!done);
 
+    if(client_context != NULL){
+        free(client_context->chandle_table);
+        free(client_context);
+    }
+    
     log_info("Connection closed at socket %d!\n", client_socket);
     close(client_socket);
 }
@@ -226,6 +188,8 @@ int main(void)
     db_startup();
 
     handle_client(client_socket);
+
+    shutdown_server();
 
     return 0;
 }

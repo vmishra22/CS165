@@ -7,4 +7,6 @@
 
 Table* lookup_table(char *name);
 
+Column* retrieve_column(Table* table, char* col_name);
+
 #endif

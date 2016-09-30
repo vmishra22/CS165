@@ -192,12 +192,13 @@ DbOperator* parse_insert(char* query_command, message* send_message) {
         char** command_index = &query_command;
         char* db_tbl_name = next_token(command_index, &send_message->status);
 
-        strsep(&db_tbl_name, ".");
-        char* table_name = db_tbl_name;
-
         if (send_message->status == INCORRECT_FORMAT) {
             return NULL;
         }
+
+        strsep(&db_tbl_name, ".");
+        char* table_name = db_tbl_name;
+        
         // lookup the table and make sure it exists. 
         Table* insert_table = lookup_table(table_name);
         if (insert_table == NULL) {
@@ -226,6 +227,92 @@ DbOperator* parse_insert(char* query_command, message* send_message) {
         send_message->status = UNKNOWN_COMMAND;
         return NULL;
     }
+}
+
+/**
+ * parse_select 
+ **/
+
+DbOperator* parse_select(char* query_command, message* send_message) {
+    if (strncmp(query_command, "(", 1) == 0) {
+        query_command++;
+        char** command_index = &query_command;
+        char* db_tbl_col_name = next_token(command_index, &send_message->status);
+        cs165_log(stdout, "command_index: %s \n", *command_index);
+
+        if (send_message->status == INCORRECT_FORMAT) {
+            return NULL;
+        }
+
+        strsep(&db_tbl_col_name, ".");
+
+        //SELECT - type 2.
+        if(db_tbl_col_name == NULL){
+
+        }else{
+            char* tbl_name = strsep(&db_tbl_col_name, ".");
+            char* col_name = db_tbl_col_name;
+
+            Table* scan_table = lookup_table(tbl_name);
+            if (scan_table == NULL) {
+                send_message->status = OBJECT_NOT_FOUND;
+                return NULL;
+            }
+
+            Column* scan_column = retrieve_column(scan_table, col_name);
+            if (scan_column == NULL) {
+                send_message->status = OBJECT_NOT_FOUND;
+                return NULL;
+            }
+
+            char* low_val = next_token(command_index, &send_message->status);
+            char* high_val = next_token(command_index, &send_message->status);
+            int last_char = strlen(high_val) - 1;
+            if (high_val[last_char] != ')') {
+                send_message->status = INCORRECT_FORMAT;
+                return NULL;
+            }
+            high_val[last_char] = '\0';
+            
+            DbOperator* dbo = malloc(sizeof(DbOperator));
+            dbo->type = SELECT;
+            dbo->operator_fields.select_operator.table = scan_table;
+
+            Comparator* comparator = malloc(sizeof(Comparator));
+            memset(comparator, 0, sizeof(Comparator));
+            if(strcmp(low_val, "null") == 0){
+                comparator->type1 = NO_COMPARISON;
+            }
+            else{
+                comparator->type1 = GREATER_THAN_OR_EQUAL;
+                int low_value = atoi(low_val);
+                comparator->p_low = low_value;
+            }
+            if(strcmp(high_val, "null") == 0){
+                comparator->type2 = NO_COMPARISON;
+            }
+            else{
+                comparator->type2 = LESS_THAN;
+                int high_value = atoi(high_val);
+                comparator->p_high = high_value;
+            }
+
+            GeneralizedColumn* pGenColumn = malloc(sizeof(GeneralizedColumn));
+            pGenColumn->column_type = COLUMN;
+            pGenColumn->column_pointer.column = scan_column;
+            comparator->gen_col = pGenColumn;
+
+            dbo->operator_fields.select_operator.comparator = comparator;
+
+            send_message->status = OK_WAIT_FOR_RESPONSE;
+            return dbo;
+        }
+    }else {
+        send_message->status = UNKNOWN_COMMAND;
+        return NULL;
+    }
+
+    return NULL;
 }
 
 /**
@@ -268,7 +355,26 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         query_command += 17;
         dbo = parse_insert(query_command, send_message);
 
-    } else if (strncmp(query_command, "shutdown", 8) == 0) {
+    }else if (strncmp(query_command, "select", 6) == 0){
+        query_command += 6;
+        if(context !=  NULL)
+            free(context);
+        strcpy(context->chandle_table[(context->chandles_in_use)++].name, handle);
+        if(context->chandles_in_use == context->chandle_slots){
+            context->chandle_slots *= 2; 
+            context->chandle_table = (GeneralizedColumnHandle*)
+                            realloc(context->chandle_table, (context->chandle_slots) * sizeof(GeneralizedColumnHandle));
+        }
+
+        dbo = parse_select(query_command, send_message);
+
+    }else if(strncmp(query_command, "fetch", 5) == 0){
+        query_command += 5;
+
+    }else if(strncmp(query_command, "print", 5) == 0){
+        query_command += 5;
+
+    }else if (strncmp(query_command, "shutdown", 8) == 0) {
         Status ret_status;
         ret_status = saveDatabase();
         if(ret_status.code != ERROR)
