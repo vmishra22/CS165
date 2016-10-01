@@ -110,10 +110,16 @@ void handle_client(int client_socket) {
     } while (!done);
 
     if(client_context != NULL){
+        int i=0;
+        for(i=0; i<client_context->chandles_in_use; i++){
+            GeneralizedColumnHandle* pGenHandle = &(client_context->chandle_table[i]);
+            if(pGenHandle->generalized_column.column_pointer.result != NULL)
+                free(pGenHandle->generalized_column.column_pointer.result);
+        }
         free(client_context->chandle_table);
         free(client_context);
     }
-    
+
     log_info("Connection closed at socket %d!\n", client_socket);
     close(client_socket);
 }

@@ -7,6 +7,6 @@
 
 Table* lookup_table(char *name);
 
-Column* retrieve_column(Table* table, char* col_name);
+Column* retrieve_column_for_scan(Table* table, char* col_name);
 
 #endif

@@ -13,12 +13,30 @@ Table* lookup_table(char *name) {
 	return NULL;
 }
 
-Column* retrieve_column(Table* table, char* col_name){
+Column* retrieve_column_for_scan(Table* table, char* colname){
 	size_t i;
 	size_t numColumns = table->col_count;
 	for(i=0; i<numColumns; i++){
-		if(strcmp(table->columns[i].name, col_name) == 0){
-			return &(table->columns[i]);
+		if(strcmp(table->columns[i].name, colname) == 0){
+			Column* scanColumn = &(table->columns[i]);
+			char colPath[256];
+			strcpy(colPath, "../data/");
+			strcat(colPath, current_db->name);
+			strcat(colPath, "/");
+			strcat(colPath, table->name);
+			strcat(colPath, "/");
+			strcat(colPath, colname);
+
+			FILE *ptr_column;
+			ptr_column=fopen(colPath, "rb");
+			if(!ptr_column){
+				return NULL;
+			}
+			scanColumn->data = (int*)malloc(sizeof(int)*(table->table_length));
+			size_t read_val = fread(scanColumn->data, sizeof(int), table->table_length, ptr_column);
+			(void)read_val;
+			fclose(ptr_column);
+			return scanColumn;
 		}
 	}
 
@@ -70,6 +88,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         return;
 
     size_t i;
+    int j;
     ClientContext* context = query->context;
     Comparator* comparator = NULL;
     Table* table = NULL;
@@ -77,18 +96,24 @@ void execute_DbOperator(DbOperator* query, char** msg) {
     switch(query->type){
         case INSERT: 
             table = query->operator_fields.insert_operator.table;
-            (table->table_length)++;
-            size_t columnSize = table->table_length;
-            
             size_t numColumns = table->col_count;
+
+            size_t columnSize = table->table_length;
+            //check if the column data size need to be modified.
+            if(columnSize == table->col_data_capacity){
+            	table->col_data_capacity *= 2; 
+            	for(i=0; i<numColumns; i++){
+            		column = &(table->columns[i]);
+            		column->data = (int*)realloc(column->data, (table->col_data_capacity) * sizeof(int));
+            	}
+            }
+            
+            //Copy the values into column data.
             for(i=0; i<numColumns; i++){
                 column = &(table->columns[i]);
-                if(columnSize == table->col_data_capacity){
-                    table->col_data_capacity *= 2; 
-                    column->data = (int*)realloc(column->data, (table->col_data_capacity) * sizeof(int));
-                }
-                column->data[columnSize-1] = query->operator_fields.insert_operator.values[i];
+                column->data[columnSize] = query->operator_fields.insert_operator.values[i];
             }
+            (table->table_length)++;
             char insertMsg[] = "Insert Operation Succeeded";
             char str[128];
             memset(str, '\0', 128);
@@ -113,14 +138,53 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         			break;
         		}
         		Result* resultIndices = computeResultIndices(table, column, comparator);
-        		GeneralizedColumnHandle* pGenHandle = &(context->chandle_table[(context->chandles_in_use)-1]);
+        		if(context->chandles_in_use == context->chandle_slots){
+		            context->chandle_slots *= 2; 
+		            context->chandle_table = (GeneralizedColumnHandle*)
+		                            realloc(context->chandle_table, (context->chandle_slots) * sizeof(GeneralizedColumnHandle));
+        		}
+        		GeneralizedColumnHandle* pGenHandle = &(context->chandle_table[context->chandles_in_use]);
+        		strcpy(pGenHandle->name, comparator->handle);
         		pGenHandle->generalized_column.column_type = RESULT;
         		pGenHandle->generalized_column.column_pointer.result = resultIndices;
+        		context->chandles_in_use++;
+        		if(column->data != NULL)
+        			free(column->data);
         		free(pGenColumn);
         		free(comparator);
         	}
             break;
         case FETCH:
+
+        	column = query->operator_fields.fetch_operator.column;
+        	char* handle = query->operator_fields.fetch_operator.handle;
+        	int numCHandles = context->chandles_in_use;
+        	GeneralizedColumnHandle* pGenHandle = NULL;
+        	for(j=0; j<numCHandles; j++){
+        		pGenHandle = &(context->chandle_table[j]);
+        		if(strcmp(pGenHandle->name, handle) == 0 && 
+        			(pGenHandle->generalized_column.column_type == RESULT)){
+        			Result* pResult = pGenHandle->generalized_column.column_pointer.result;
+        			int *resultColValues = (int*)malloc(sizeof(int) * (pResult->num_tuples));
+        			int* pPayload = (int*)pResult->payload;
+        			int k = 0;
+        			for(i=0; i<(pResult->num_tuples); i++){
+        				resultColValues[k++] = column->data[pPayload[i]];
+        			}
+        			if(context->chandles_in_use == context->chandle_slots){
+			            context->chandle_slots *= 2; 
+			            context->chandle_table = (GeneralizedColumnHandle*)
+			                            realloc(context->chandle_table, (context->chandle_slots) * sizeof(GeneralizedColumnHandle));
+        			}
+        			GeneralizedColumnHandle* pGenHandle = &(context->chandle_table[context->chandles_in_use]);
+	        		strcpy(pGenHandle->name, handle);
+	        		pGenHandle->generalized_column.column_type = RESULT;
+	        		pGenHandle->generalized_column.column_pointer.result = (void*)resultColValues;
+	        		context->chandles_in_use++;
+	        		if(column->data != NULL)
+        				free(column->data);
+        		}
+        	}
             break;
         case PRINT:
             break;

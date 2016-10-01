@@ -37,6 +37,8 @@ SOFTWARE.
 #define MAX_TABLE_SIZE 8
 //Maximum number of columns in a table
 #define MAX_COLUMN_SIZE 16
+
+#define MAX_PRINT_HANDLE 8
 /**
  * EXTRA
  * DataType
@@ -224,12 +226,28 @@ typedef struct SelectOperator {
     Table* table;
 } SelectOperator;
 /*
+ * necessary fields for fetch
+ */
+typedef struct FetchOperator {
+    Column* column;
+    char* handle;
+} FetchOperator;
+/*
+ * necessary fields for print
+ */
+typedef struct PrintOperator {
+    char* handleNames[MAX_PRINT_HANDLE];
+    int numHandles;
+} PrintOperator;
+/*
  * union type holding the fields of any operator
  */
 typedef union OperatorFields {
     InsertOperator insert_operator;
     OpenOperator open_operator;
     SelectOperator select_operator;
+    FetchOperator fetch_operator;
+    PrintOperator print_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:

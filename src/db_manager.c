@@ -52,7 +52,7 @@ Table* create_table(Db* db, const char* name, size_t num_columns, Status *ret_st
 
 	//Check if the directory for table exists in the database.
 	char tablePath[128];
-	strcpy(tablePath, "../database/");
+	strcpy(tablePath, "../data/");
 	strcat(tablePath, db->name);
 	strcat(tablePath, "/");
 	strcat(tablePath, name);
@@ -85,7 +85,7 @@ void add_db(const char* db_name, bool new, Status* status) {
 		current_db->tables_size = 0;
 
 		char dbPath[128];
-		strcpy(dbPath, "../database/");
+		strcpy(dbPath, "../data/");
 		strcat(dbPath, db_name);
 		DIR* dir = opendir(dbPath);
 		if (dir){
@@ -112,14 +112,14 @@ Status db_startup(){
 	memset(&(catalog.dbName), '\0', MAX_SIZE_NAME);
 
 
-	//Check the existence of "database" directory.
-	DIR* dir = opendir("../database");
+	//Check the existence of "data" directory.
+	DIR* dir = opendir("../data");
 	if (dir){
 	    closedir(dir);
 	}
 	else if (ENOENT == errno){
 		int status;
-		status = mkdir("../database", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+		status = mkdir("../data", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 		if(status == -1){
 			ret_status.code = ERROR;
 		}
@@ -137,7 +137,7 @@ Status db_startup(){
 	//i.e. database catalog is non-existent. 
 	//The catalog would be created at the time of shutdown.
 	FILE *ptr_catalog;
-	ptr_catalog=fopen("../database/catalog.bin","r+b");
+	ptr_catalog=fopen("../data/catalog.bin","r+b");
 
 	if(!ptr_catalog){
 		ret_status.code = ERROR;
@@ -167,7 +167,7 @@ Status db_startup(){
 		for(j=0; j<numTabColumns; j++){
 			Column* column = &(table->columns[j]);
 			strcpy(column->name, catalog.columnNames[i][j]);
-			column->data = (int*)malloc(sizeof(int) * (table->col_data_capacity));
+			column->data = NULL;
 		}
 	}
 	fclose(ptr_catalog);
@@ -184,7 +184,7 @@ Status saveDatabase(){
 	memset(&catalog, 0, sizeof(Catalog));
 
 	FILE *ptr_catalog;
-	ptr_catalog=fopen("../database/catalog.bin","wb");
+	ptr_catalog=fopen("../data/catalog.bin","wb");
 
 	if(!ptr_catalog){
 		ret_status.code =  ERROR;
@@ -205,7 +205,7 @@ Status saveDatabase(){
 		catalog.columnDataCapacity[i] = table->col_data_capacity;
 
 		char tablePath[256];
-		strcpy(tablePath, "../database/");
+		strcpy(tablePath, "../data/");
 		strcat(tablePath, current_db->name);
 		strcat(tablePath, "/");
 		strcat(tablePath, tableName);
