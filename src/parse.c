@@ -231,7 +231,7 @@ DbOperator* parse_insert(char* query_command, message* send_message) {
 /**
  * parse_avg
  **/
-DbOperator* parse_avg(char* query_command, char* handle, ClientContext* context, message* send_message){
+DbOperator* parse_avg_sum(char* query_command, char* handle, ClientContext* context, message* send_message, bool isSum){
     if (strncmp(query_command, "(", 1) == 0) {
         query_command++;
         GeneralizedColumn* pGenColumn = NULL;
@@ -276,11 +276,12 @@ DbOperator* parse_avg(char* query_command, char* handle, ClientContext* context,
         }
 
         DbOperator* dbo = malloc(sizeof(DbOperator));
-        dbo->type = AVG;
-        dbo->operator_fields.avg_operator.gen_col = pGenColumn;
-        dbo->operator_fields.avg_operator.handle = (char*)malloc(strlen(handle) + 1);
-        dbo->operator_fields.avg_operator.num_data = nData;
-        strcpy(dbo->operator_fields.avg_operator.handle, handle);
+        dbo->type = AVG_SUM;
+        dbo->operator_fields.avg_sum_operator.gen_col = pGenColumn;
+        dbo->operator_fields.avg_sum_operator.num_data = nData;
+        dbo->operator_fields.avg_sum_operator.isSum = isSum;
+        dbo->operator_fields.avg_sum_operator.handle = (char*)malloc(strlen(handle) + 1);
+        strcpy(dbo->operator_fields.avg_sum_operator.handle, handle);
         send_message->status = OK_WAIT_FOR_RESPONSE;
 
         return dbo;
@@ -515,7 +516,11 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
 
     }else if(strncmp(query_command, "avg", 3) == 0){
         query_command += 3;
-        dbo = parse_avg(query_command, handle, context, send_message);
+        dbo = parse_avg_sum(query_command, handle, context, send_message, false);
+
+    }else if(strncmp(query_command, "sum", 3) == 0){
+        query_command += 3;
+        dbo = parse_avg_sum(query_command, handle, context, send_message, true);
 
     }else if (strncmp(query_command, "shutdown", 8) == 0) {
         Status ret_status;

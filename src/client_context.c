@@ -261,13 +261,14 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	free(valuesFloatVec);
             break;
         }
-        case AVG:
+        case AVG_SUM:
         {
         	float avg_val = 0.0;
         	float sum = 0.0;
-        	char* handle = query->operator_fields.avg_operator.handle;
-        	GeneralizedColumn* pGenColumn = query->operator_fields.avg_operator.gen_col;
-        	size_t dataSize = query->operator_fields.avg_operator.num_data;
+        	char* handle = query->operator_fields.avg_sum_operator.handle;
+        	bool isSum = query->operator_fields.avg_sum_operator.isSum;
+        	GeneralizedColumn* pGenColumn = query->operator_fields.avg_sum_operator.gen_col;
+        	size_t dataSize = query->operator_fields.avg_sum_operator.num_data;
         	if(pGenColumn->column_type == COLUMN){
         		Column* column = pGenColumn->column_pointer.column;
         		for(i=0; i<dataSize; i++){
@@ -277,30 +278,38 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	}else if(pGenColumn->column_type == RESULT){
         		Result* pResult = pGenColumn->column_pointer.result;
     			int* pPayload = (int*)pResult->payload;
-    			int numTuples = pResult->num_tuples;
     			for(i=0; i<dataSize; i++){
     				sum += pPayload[i];
     			}
     			avg_val = sum/dataSize;
-        	}
-        	else
+        	}else
         		return;
-        			
+
+        	Result* pResultNew = (Result*)malloc(sizeof(Result));
+			memset(pResultNew, 0, sizeof(Result));
+			pResultNew->num_tuples = 1;
+
+        	float* pPayloadAvg = NULL;
+        	int* pPayloadInt = NULL;
+        	if(isSum){
+        		pPayloadInt = (int*)malloc(sizeof(int));
+        		*pPayloadInt = (int)sum;
+        		pResultNew->payload = (void*)pPayloadInt;
+				pResultNew->data_type = INT;
+        	}else{
+        		pPayloadAvg = (float*)malloc(sizeof(float));
+				*pPayloadAvg = avg_val;
+				pResultNew->payload = (void*)pPayloadAvg;
+				pResultNew->data_type = FLOAT;
+        	}
         			
 			GeneralizedColumnHandle* pGenHandleNew = &(context->chandle_table[context->chandles_in_use]);
     		strcpy(pGenHandleNew->name, handle);
     		pGenHandleNew->generalized_column.column_type = RESULT;
-			Result* pResultNew = (Result*)malloc(sizeof(Result));
-			memset(pResultNew, 0, sizeof(Result));
-			float *pPayloadNew = (float*)malloc(sizeof(float));
-			*pPayloadNew = avg_val;
-			pResultNew->payload = (void*)pPayloadNew;;
-			pResultNew->num_tuples = 1;
-			pResultNew->data_type = FLOAT;
     		pGenHandleNew->generalized_column.column_pointer.result = pResultNew;
     		context->chandles_in_use++;
     		free(pGenColumn);
-			free(query->operator_fields.avg_operator.handle);
+			free(query->operator_fields.avg_sum_operator.handle);
 			break;
         }       
     }
