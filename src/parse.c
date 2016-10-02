@@ -266,11 +266,17 @@ DbOperator* parse_fetch(char* query_command, char* handle, message* send_message
         query_command++;
         char** command_index = &query_command;
         char* db_tbl_col_name = next_token(command_index, &send_message->status);
-        cs165_log(stdout, "command_index: %s \n", *command_index);
+        char* targetResultVecName = next_token(command_index, &send_message->status);
 
         if (send_message->status == INCORRECT_FORMAT) {
             return NULL;
         }
+
+        int last_char = strlen(targetResultVecName) - 1;
+        if (targetResultVecName[last_char] != ')') {
+            return NULL;
+        }
+        targetResultVecName[last_char] = '\0';
 
         strsep(&db_tbl_col_name, ".");
         char* tbl_name = strsep(&db_tbl_col_name, ".");
@@ -289,6 +295,9 @@ DbOperator* parse_fetch(char* query_command, char* handle, message* send_message
         DbOperator* dbo = malloc(sizeof(DbOperator));
         dbo->type = FETCH;
         dbo->operator_fields.fetch_operator.column = scan_column;
+        dbo->operator_fields.fetch_operator.targetVecHandle = (char*)malloc(strlen(targetResultVecName) + 1);
+        strcpy(dbo->operator_fields.fetch_operator.targetVecHandle, targetResultVecName);
+        dbo->operator_fields.fetch_operator.handle = (char*)malloc(strlen(handle) + 1);
         strcpy(dbo->operator_fields.fetch_operator.handle, handle);
 
         send_message->status = OK_WAIT_FOR_RESPONSE;
@@ -310,7 +319,7 @@ DbOperator* parse_select(char* query_command, char* handle, message* send_messag
         query_command++;
         char** command_index = &query_command;
         char* db_tbl_col_name = next_token(command_index, &send_message->status);
-        cs165_log(stdout, "command_index: %s \n", *command_index);
+    
 
         if (send_message->status == INCORRECT_FORMAT) {
             return NULL;
@@ -373,6 +382,7 @@ DbOperator* parse_select(char* query_command, char* handle, message* send_messag
             pGenColumn->column_type = COLUMN;
             pGenColumn->column_pointer.column = scan_column;
             comparator->gen_col = pGenColumn;
+            comparator->handle = (char*)malloc(strlen(handle) + 1);
             strcpy(comparator->handle, handle);
 
             dbo->operator_fields.select_operator.comparator = comparator;

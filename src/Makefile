@@ -64,6 +64,6 @@ clean:
 
 distclean: clean
 	rm -rf $(DEPSDIR)
-	rm -rf ../database
+	rm -rf ../data
 
 .PHONY: all clean distclean

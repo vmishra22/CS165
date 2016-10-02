@@ -112,7 +112,7 @@ void parse_load_query(char* loadQuery, int client_socket){
                 strcpy(payload, newQueryInsert);
                 load_send_message.length = strlen(payload);
 
-                cs165_log(stdout, payload);
+                //cs165_log(stdout, payload);
 
                 if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
                     log_err("Failed to send message header.");
@@ -197,7 +197,7 @@ int main(void)
             break;
         }
 
-        cs165_log(stdout, output_str);
+        cs165_log(stdout, "-- %s", output_str);
         // Only process input that is greater than 1 character.
         // Ignore things such as new lines.
         // Otherwise, convert to message and send the message and the

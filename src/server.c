@@ -114,7 +114,11 @@ void handle_client(int client_socket) {
         for(i=0; i<client_context->chandles_in_use; i++){
             GeneralizedColumnHandle* pGenHandle = &(client_context->chandle_table[i]);
             if(pGenHandle->generalized_column.column_pointer.result != NULL)
+            {
+                if((pGenHandle->generalized_column.column_pointer.result)->payload != NULL)
+                    free((pGenHandle->generalized_column.column_pointer.result)->payload);
                 free(pGenHandle->generalized_column.column_pointer.result);
+            }
         }
         free(client_context->chandle_table);
         free(client_context);

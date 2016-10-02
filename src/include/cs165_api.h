@@ -230,6 +230,7 @@ typedef struct SelectOperator {
  */
 typedef struct FetchOperator {
     Column* column;
+    char* targetVecHandle;
     char* handle;
 } FetchOperator;
 /*

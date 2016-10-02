@@ -215,6 +215,10 @@ Status saveDatabase(){
 			Column* column = &(table->columns[j]);
 			char* colName = column->name;
 			strcpy(catalog.columnNames[i][j], colName);
+			//If nothing to serialize then keep iterating..
+			if(column->data == NULL)
+				continue;
+			
 			FILE *ptr_column;
 
 			char colPath[256];
