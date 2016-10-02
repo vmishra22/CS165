@@ -228,7 +228,70 @@ DbOperator* parse_insert(char* query_command, message* send_message) {
         return NULL;
     }
 }
+/**
+ * parse_avg
+ **/
+DbOperator* parse_avg(char* query_command, char* handle, ClientContext* context, message* send_message){
+    if (strncmp(query_command, "(", 1) == 0) {
+        query_command++;
+        GeneralizedColumn* pGenColumn = NULL;
+        size_t nData = 0;
+        char* pInputHandle = trim_parenthesis(query_command);
+        char* pDotChr = strchr(pInputHandle, '.');
+        if(pDotChr == NULL){
+            int numCHandles = context->chandles_in_use;
+            GeneralizedColumnHandle* pGenHandle = NULL;
+            int j;
+            for(j=0; j<numCHandles; j++){
+                pGenHandle = &(context->chandle_table[j]);
+                if(strcmp(pGenHandle->name, pInputHandle) == 0 && 
+                    (pGenHandle->generalized_column.column_type == RESULT)){
+                    Result* pResult = pGenHandle->generalized_column.column_pointer.result;
+                    pGenColumn = malloc(sizeof(GeneralizedColumn));
+                    pGenColumn->column_type = RESULT;
+                    pGenColumn->column_pointer.result = pResult;
+                    nData = pResult->num_tuples;
+                    break;
+                }
+            }
+        }
+        else{
+            strsep(&pInputHandle, ".");
+            char* tbl_name = strsep(&pInputHandle, ".");
+            char* col_name = pInputHandle;
+            Table* scan_table = lookup_table(tbl_name);
+            if (scan_table == NULL) {
+                send_message->status = OBJECT_NOT_FOUND;
+                return NULL;
+            }
+            Column* scan_column = retrieve_column_for_scan(scan_table, col_name);
+            if (scan_column == NULL) {
+                send_message->status = OBJECT_NOT_FOUND;
+                return NULL;
+            }
+            pGenColumn = malloc(sizeof(GeneralizedColumn));
+            pGenColumn->column_type = COLUMN;
+            pGenColumn->column_pointer.column = scan_column;
+            nData = scan_table->table_length;
+        }
 
+        DbOperator* dbo = malloc(sizeof(DbOperator));
+        dbo->type = AVG;
+        dbo->operator_fields.avg_operator.gen_col = pGenColumn;
+        dbo->operator_fields.avg_operator.handle = (char*)malloc(strlen(handle) + 1);
+        dbo->operator_fields.avg_operator.num_data = nData;
+        strcpy(dbo->operator_fields.avg_operator.handle, handle);
+        send_message->status = OK_WAIT_FOR_RESPONSE;
+
+        return dbo;
+
+    }else {
+        send_message->status = UNKNOWN_COMMAND;
+        return NULL;
+    }
+
+    return NULL;
+}
 /**
  * parse_print
  **/
@@ -449,6 +512,10 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
     }else if(strncmp(query_command, "print", 5) == 0){
         query_command += 5;
         dbo = parse_print(query_command, send_message);
+
+    }else if(strncmp(query_command, "avg", 3) == 0){
+        query_command += 3;
+        dbo = parse_avg(query_command, handle, context, send_message);
 
     }else if (strncmp(query_command, "shutdown", 8) == 0) {
         Status ret_status;

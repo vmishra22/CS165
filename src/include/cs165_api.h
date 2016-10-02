@@ -203,7 +203,8 @@ typedef enum OperatorType {
     OPEN,
     SELECT, 
     FETCH, 
-    PRINT
+    PRINT, 
+    AVG
 } OperatorType;
 /*
  * necessary fields for insertion
@@ -241,6 +242,14 @@ typedef struct PrintOperator {
     int numHandles;
 } PrintOperator;
 /*
+ * necessary fields for avg
+ */
+typedef struct AvgOperator {
+    GeneralizedColumn* gen_col;
+    char* handle;
+    size_t num_data;
+} AvgOperator;
+/*
  * union type holding the fields of any operator
  */
 typedef union OperatorFields {
@@ -249,6 +258,7 @@ typedef union OperatorFields {
     SelectOperator select_operator;
     FetchOperator fetch_operator;
     PrintOperator print_operator;
+    AvgOperator avg_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:

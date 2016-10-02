@@ -1,6 +1,7 @@
 
 #include "client_context.h"
 #include <string.h>
+#include "utils.h"
 
 Table* lookup_table(char *name) {
 	size_t i;
@@ -208,45 +209,100 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	}
             break;
         case PRINT:
-        	
+    	{
         	handleNames = query->operator_fields.print_operator.handleNames;
         	int numHandles = query->operator_fields.print_operator.numHandles;
-        	int** valuesVec = (int**)malloc(sizeof(int*) * numHandles);
+        	char* retStr = (char*)malloc(1024);
+        	memset(retStr, '\0', 1024);
+        	int** valuesIntVec = (int**)malloc(sizeof(int*) * numHandles);
+        	float** valuesFloatVec = (float**)malloc(sizeof(float*) * numHandles);
         	int num_tuples = 0;
+        	int iIndex = 0, fIndex = 0;
+        	DataType hTypes[numHandles];
+        	Result* pResult = NULL;
         	for(j=0; j<numHandles; j++){
         		char* handleName = handleNames[j];
         		for(k=0; k<context->chandles_in_use; k++){
 		            GeneralizedColumnHandle* pGenHandle = &(context->chandle_table[k]);
 		            if(strcmp(pGenHandle->name, handleName) == 0 && pGenHandle->generalized_column.column_type == RESULT){
-		            	valuesVec[j] = (int*)(pGenHandle->generalized_column.column_pointer.result)->payload;
-		            	num_tuples = (pGenHandle->generalized_column.column_pointer.result)->num_tuples;
+		            	pResult = pGenHandle->generalized_column.column_pointer.result;
+		            	num_tuples = pResult->num_tuples;
+		            	if(pResult->data_type == INT){
+		            		valuesIntVec[iIndex++] = (int*)pResult->payload;
+		            	}else if(pResult->data_type == FLOAT){
+		            		valuesFloatVec[fIndex++] = (float*)pResult->payload;
+		            	}
+		            	hTypes[j] = pResult->data_type;
 		            	break;
 					}
         		}
         	}
-        	char* retStr = (char*)malloc(1024);
-        	memset(retStr, '\0', 1024);
+        	iIndex = 0; fIndex = 0;
         	for(j=0; j<num_tuples; j++){
         		for(k=0; k<numHandles; k++){
-        			char str[5];
-        			sprintf(str, "%d", valuesVec[k][j]);
-        			//printf("%d", valuesVec[k][j]);
+        			char str[10];
+        			if(hTypes[k] == INT)
+        				sprintf(str, "%d", valuesIntVec[iIndex++][j]);
+        			else if(hTypes[k] == FLOAT)
+        				sprintf(str, "%.1f", valuesFloatVec[fIndex++][j]);
         			if(k != numHandles-1)
         				strcat(str, ",");
-        				//printf(",");
         			strcat(retStr, str);
         		}
         		strcat(retStr, "\n");
+        		iIndex = 0; fIndex = 0;
         	}
         	strcpy(*msg, retStr);
         	free(retStr);
         	for(k=0; k<numHandles; k++){
         		free(handleNames[k]);
         	}
-        	free(valuesVec);
-        	
+        	free(valuesIntVec);
+        	free(valuesFloatVec);
             break;
-		            
+        }
+        case AVG:
+        {
+        	float avg_val = 0.0;
+        	float sum = 0.0;
+        	char* handle = query->operator_fields.avg_operator.handle;
+        	GeneralizedColumn* pGenColumn = query->operator_fields.avg_operator.gen_col;
+        	size_t dataSize = query->operator_fields.avg_operator.num_data;
+        	if(pGenColumn->column_type == COLUMN){
+        		Column* column = pGenColumn->column_pointer.column;
+        		for(i=0; i<dataSize; i++){
+    				sum += column->data[i];
+    			} 
+    			avg_val = sum/dataSize;
+        	}else if(pGenColumn->column_type == RESULT){
+        		Result* pResult = pGenColumn->column_pointer.result;
+    			int* pPayload = (int*)pResult->payload;
+    			int numTuples = pResult->num_tuples;
+    			for(i=0; i<dataSize; i++){
+    				sum += pPayload[i];
+    			}
+    			avg_val = sum/dataSize;
+        	}
+        	else
+        		return;
+        			
+        			
+			GeneralizedColumnHandle* pGenHandleNew = &(context->chandle_table[context->chandles_in_use]);
+    		strcpy(pGenHandleNew->name, handle);
+    		pGenHandleNew->generalized_column.column_type = RESULT;
+			Result* pResultNew = (Result*)malloc(sizeof(Result));
+			memset(pResultNew, 0, sizeof(Result));
+			float *pPayloadNew = (float*)malloc(sizeof(float));
+			*pPayloadNew = avg_val;
+			pResultNew->payload = (void*)pPayloadNew;;
+			pResultNew->num_tuples = 1;
+			pResultNew->data_type = FLOAT;
+    		pGenHandleNew->generalized_column.column_pointer.result = pResultNew;
+    		context->chandles_in_use++;
+    		free(pGenColumn);
+			free(query->operator_fields.avg_operator.handle);
+			break;
+        }       
     }
     
     free(query);

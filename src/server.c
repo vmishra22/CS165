@@ -91,7 +91,7 @@ void handle_client(int client_socket) {
             strcpy(retMessage, payload_to_client);
             free(payload_to_client);
 
-            cs165_log(stdout, retMessage);
+            //cs165_log(stdout, retMessage);
             send_message.length = strlen(retMessage);
             send_message.payload = NULL;
 
