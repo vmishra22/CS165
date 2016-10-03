@@ -205,7 +205,8 @@ typedef enum OperatorType {
     FETCH, 
     PRINT, 
     AVG_SUM,
-    ADD_SUB
+    ADD_SUB,
+    MAX_MIN
 } OperatorType;
 /*
  * necessary fields for insertion
@@ -262,6 +263,15 @@ typedef struct AddSubOperator {
     bool isAdd;
 } AddSubOperator;
 /*
+ * necessary fields for add/sub
+ */
+typedef struct MaxMinOperator {
+    GeneralizedColumn* gen_col;
+    char* handle;
+    size_t num_data;
+    bool isMax;
+} MaxMinOperator;
+/*
  * union type holding the fields of any operator
  */
 typedef union OperatorFields {
@@ -272,6 +282,7 @@ typedef union OperatorFields {
     PrintOperator print_operator;
     AvgSumOperator avg_sum_operator;
     AddSubOperator add_sub_operator;
+    MaxMinOperator max_min_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:

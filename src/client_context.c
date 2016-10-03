@@ -95,6 +95,11 @@ static int* get_col_col_add_sub(Column* column1, Column* column2, size_t nData, 
 			opResult[i] = column1->data[i] - column2->data[i];
    		} 
 	}
+	if(column1->data != NULL)
+		free(column1->data);
+	if(column2->data != NULL)
+		free(column2->data);
+	
 	return opResult;        		
 }
 
@@ -116,6 +121,9 @@ static int* get_col_res_add_sub(Column* column1, Result* column2, size_t nData, 
 			opResult[i] = column1->data[i] - pData2[i];
    		} 
 	}
+
+	if(column1->data != NULL)
+		free(column1->data);
 	return opResult;    
 }
 
@@ -137,6 +145,8 @@ static int* get_res_col_add_sub(Result* column1, Column* column2, size_t nData, 
 			opResult[i] = pData1[i] - column2->data[i];
    		} 
 	}
+	if(column2->data != NULL)
+		free(column2->data);
 	return opResult;    
 }
 
@@ -161,6 +171,58 @@ static int* get_res_res_add_sub(Result* column1, Result* column2, size_t nData, 
 	}
 
 	return opResult;    
+}
+
+static int get_max_min_col_value(GeneralizedColumn* pGenColumn, size_t dataSize, bool isMax){
+	int outVal;
+	size_t i;
+	if(pGenColumn->column_type == COLUMN){
+		Column* column = pGenColumn->column_pointer.column;
+		outVal = column->data[0];
+		if(isMax){
+			for(i=1; i<dataSize; i++){
+				if(column->data[i] > outVal)
+					outVal = column->data[i];
+			}
+		}
+		else{
+			for(i=1; i<dataSize; i++){
+				if(column->data[i] < outVal)
+					outVal = column->data[i];
+			}
+		}
+		free(column->data);
+	}else{
+		Result* pResult = pGenColumn->column_pointer.result;
+		int* resValues = (int*)(pResult->payload);
+		outVal = resValues[0];
+		if(isMax){
+			for(i=1; i<dataSize; i++){
+				if(resValues[i] > outVal)
+					outVal = resValues[i];
+			}
+		}
+		else{
+			for(i=1; i<dataSize; i++){
+				if(resValues[i] < outVal)
+					outVal = resValues[i];
+			}
+		}
+	}
+	return outVal;
+}
+GeneralizedColumnHandle* check_for_existing_handle(ClientContext* context, char* handle){
+	GeneralizedColumnHandle* pGenHandle = NULL;
+	int j=0;
+	int numCHandles = context->chandles_in_use;
+	for(j=0; j<numCHandles; j++){
+		pGenHandle = &(context->chandle_table[j]);
+		if(strcmp(pGenHandle->name, handle) == 0 && 
+			(pGenHandle->generalized_column.column_type == RESULT)){
+			return pGenHandle;
+		}
+	}
+	return NULL;
 }
 /** execute_DbOperator takes as input the DbOperator and executes the query.
  **/
@@ -231,11 +293,24 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 		            context->chandle_table = (GeneralizedColumnHandle*)
 		                            realloc(context->chandle_table, (context->chandle_slots) * sizeof(GeneralizedColumnHandle));
         		}
-        		GeneralizedColumnHandle* pGenHandle = &(context->chandle_table[context->chandles_in_use]);
-        		strcpy(pGenHandle->name, comparator->handle);
-        		pGenHandle->generalized_column.column_type = RESULT;
+        		GeneralizedColumnHandle* pGenHandle = NULL;
+        		pGenHandle = check_for_existing_handle(context, comparator->handle);
+        		if(pGenHandle != NULL){
+        			if(pGenHandle->generalized_column.column_pointer.result != NULL)
+		            {
+		                if((pGenHandle->generalized_column.column_pointer.result)->payload != NULL)
+		                    free((pGenHandle->generalized_column.column_pointer.result)->payload);
+		                free(pGenHandle->generalized_column.column_pointer.result);
+		            }
+        		}
+        		else{
+        			pGenHandle = &(context->chandle_table[context->chandles_in_use]);
+        			strcpy(pGenHandle->name, comparator->handle);
+        			context->chandles_in_use++;
+	        		pGenHandle->generalized_column.column_type = RESULT;
+        		}
+        		
         		pGenHandle->generalized_column.column_pointer.result = resultIndices;
-        		context->chandles_in_use++;
         		if(column->data != NULL)
         		{
     				free(column->data);
@@ -270,16 +345,29 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 			            context->chandle_table = (GeneralizedColumnHandle*)
 			                            realloc(context->chandle_table, (context->chandle_slots) * sizeof(GeneralizedColumnHandle));
         			}
-        			GeneralizedColumnHandle* pGenHandleNew = &(context->chandle_table[context->chandles_in_use]);
-	        		strcpy(pGenHandleNew->name, handle);
-	        		pGenHandleNew->generalized_column.column_type = RESULT;
+        			GeneralizedColumnHandle* pGenHandleNew = NULL;
+	        		pGenHandleNew = check_for_existing_handle(context, handle);
+	        		if(pGenHandleNew != NULL){
+	        			if(pGenHandleNew->generalized_column.column_pointer.result != NULL)
+			            {
+			                if((pGenHandleNew->generalized_column.column_pointer.result)->payload != NULL)
+			                    free((pGenHandleNew->generalized_column.column_pointer.result)->payload);
+			                free(pGenHandleNew->generalized_column.column_pointer.result);
+			            }
+	        		}
+	        		else{
+	        			pGenHandleNew = &(context->chandle_table[context->chandles_in_use]);
+	        			context->chandles_in_use++;
+	        			strcpy(pGenHandleNew->name, handle);
+	        			pGenHandleNew->generalized_column.column_type = RESULT;
+	        		}
+
 					Result* pResultNew = (Result*)malloc(sizeof(Result));
 					memset(pResultNew, 0, sizeof(Result));
 					pResultNew->payload = (void*)resultColValues;;
 					pResultNew->num_tuples = k;
 					pResultNew->data_type = INT;
 	        		pGenHandleNew->generalized_column.column_pointer.result = pResultNew;
-	        		context->chandles_in_use++;
 	        		if(column->data != NULL)
 	        		{
         				free(column->data);
@@ -344,6 +432,50 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	free(valuesFloatVec);
             break;
         }
+        case MAX_MIN:
+        {
+        	char* outHandle = query->operator_fields.max_min_operator.handle;
+        	bool isMax = query->operator_fields.max_min_operator.isMax;
+        	GeneralizedColumn* pGenColumn = query->operator_fields.max_min_operator.gen_col;
+        	size_t dataSize = query->operator_fields.max_min_operator.num_data;
+
+        	if(dataSize == 0)
+        		break;
+
+        	int outValue = 0;
+        	outValue = get_max_min_col_value(pGenColumn, dataSize, isMax);
+        	Result* pResultNew = (Result*)malloc(sizeof(Result));
+			memset(pResultNew, 0, sizeof(Result));
+			pResultNew->num_tuples = 1;
+			int* pPayloadInt = NULL;
+			pPayloadInt = (int*)malloc(sizeof(int));
+    		*pPayloadInt = (int)outValue;
+    		pResultNew->payload = (void*)pPayloadInt;
+			pResultNew->data_type = INT;
+
+			GeneralizedColumnHandle* pGenHandleNew = NULL;
+    		pGenHandleNew = check_for_existing_handle(context, outHandle);
+    		if(pGenHandleNew != NULL){
+    			if(pGenHandleNew->generalized_column.column_pointer.result != NULL)
+	            {
+	                if((pGenHandleNew->generalized_column.column_pointer.result)->payload != NULL)
+	                    free((pGenHandleNew->generalized_column.column_pointer.result)->payload);
+	                free(pGenHandleNew->generalized_column.column_pointer.result);
+	            }
+    		}
+    		else{
+    			pGenHandleNew = &(context->chandle_table[context->chandles_in_use]);
+    			context->chandles_in_use++;
+    			strcpy(pGenHandleNew->name, outHandle);
+    			pGenHandleNew->generalized_column.column_type = RESULT;
+    		}
+
+    		pGenHandleNew->generalized_column.column_pointer.result = pResultNew;
+    		free(pGenColumn);
+			free(query->operator_fields.max_min_operator.handle);
+
+			break;
+        }
         case ADD_SUB:
         {
         	char* outHandle = query->operator_fields.add_sub_operator.handle;
@@ -375,11 +507,24 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 			memset(pResultNew, 0, sizeof(Result));
 			pResultNew->num_tuples = dataSize;
 			pResultNew->payload = (void*)outResult;
-			GeneralizedColumnHandle* pGenHandleNew = &(context->chandle_table[context->chandles_in_use]);
-    		strcpy(pGenHandleNew->name, outHandle);
-    		pGenHandleNew->generalized_column.column_type = RESULT;
+
+			GeneralizedColumnHandle* pGenHandleNew = NULL;
+    		pGenHandleNew = check_for_existing_handle(context, outHandle);
+    		if(pGenHandleNew != NULL){
+    			if(pGenHandleNew->generalized_column.column_pointer.result != NULL)
+	            {
+	                if((pGenHandleNew->generalized_column.column_pointer.result)->payload != NULL)
+	                    free((pGenHandleNew->generalized_column.column_pointer.result)->payload);
+	                free(pGenHandleNew->generalized_column.column_pointer.result);
+	            }
+    		}
+    		else{
+    			pGenHandleNew = &(context->chandle_table[context->chandles_in_use]);
+    			context->chandles_in_use++;
+    			strcpy(pGenHandleNew->name, outHandle);
+    			pGenHandleNew->generalized_column.column_type = RESULT;
+    		}
     		pGenHandleNew->generalized_column.column_pointer.result = pResultNew;
-    		context->chandles_in_use++;
     		free(pGenColumn1);
     		free(pGenColumn2);
 			free(query->operator_fields.add_sub_operator.handle);
@@ -428,12 +573,25 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 				pResultNew->payload = (void*)pPayloadAvg;
 				pResultNew->data_type = FLOAT;
         	}
-        			
-			GeneralizedColumnHandle* pGenHandleNew = &(context->chandle_table[context->chandles_in_use]);
-    		strcpy(pGenHandleNew->name, handle);
-    		pGenHandleNew->generalized_column.column_type = RESULT;
+        	
+        	GeneralizedColumnHandle* pGenHandleNew = NULL;
+    		pGenHandleNew = check_for_existing_handle(context, handle);
+    		if(pGenHandleNew != NULL){
+    			if(pGenHandleNew->generalized_column.column_pointer.result != NULL)
+	            {
+	                if((pGenHandleNew->generalized_column.column_pointer.result)->payload != NULL)
+	                    free((pGenHandleNew->generalized_column.column_pointer.result)->payload);
+	                free(pGenHandleNew->generalized_column.column_pointer.result);
+	            }
+    		}
+    		else{
+    			pGenHandleNew = &(context->chandle_table[context->chandles_in_use]);
+    			context->chandles_in_use++;
+    			strcpy(pGenHandleNew->name, handle);
+    			pGenHandleNew->generalized_column.column_type = RESULT;
+    		}
+
     		pGenHandleNew->generalized_column.column_pointer.result = pResultNew;
-    		context->chandles_in_use++;
     		free(pGenColumn);
 			free(query->operator_fields.avg_sum_operator.handle);
 			break;

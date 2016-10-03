@@ -277,7 +277,57 @@ static GeneralizedColumn* get_generic_table_column(char* handleName, size_t* nDa
     return pGenericColumn;
 }
 /**
- * parse_add
+ * parse_max_min
+ **/
+DbOperator* parse_max_min(char* query_command, char* handle, ClientContext* context, message* send_message, bool isMax){
+    if (strncmp(query_command, "(", 1) == 0) {
+        query_command++;
+
+        size_t nData = 0;
+        GeneralizedColumn* pGenColumn = NULL;
+        char** command_index = &query_command;
+        char* handle1 = next_token(command_index, &send_message->status);
+        char* handle2 = query_command;
+        char* pDotChr = strchr(handle1, '.');
+        if(handle2 == NULL){
+            int last_char = strlen(handle1) - 1;
+            if (last_char < 0 || handle1[last_char] != ')') {
+                send_message->status = INCORRECT_FORMAT;
+                return NULL;
+            }
+            handle1[last_char] = '\0';
+            if(pDotChr == NULL){
+                pGenColumn = get_generic_result_column(handle1, context, &nData);
+            }else{
+                pGenColumn = get_generic_table_column(handle1, &nData, send_message);
+            }
+            if(pGenColumn == NULL){
+                send_message->status = INCORRECT_FORMAT;
+                return NULL;
+            }
+
+            DbOperator* dbo = malloc(sizeof(DbOperator));
+            dbo->type = MAX_MIN;
+            dbo->operator_fields.max_min_operator.gen_col = pGenColumn;
+            dbo->operator_fields.max_min_operator.num_data = nData;
+            dbo->operator_fields.max_min_operator.isMax = isMax;
+            dbo->operator_fields.max_min_operator.handle = (char*)malloc(strlen(handle) + 1);
+            strcpy(dbo->operator_fields.max_min_operator.handle, handle);
+
+            send_message->status = OK_WAIT_FOR_RESPONSE;
+            return dbo;
+        }
+        
+
+    }else {
+        send_message->status = UNKNOWN_COMMAND;
+        return NULL;
+    }
+
+    return NULL;
+}
+/**
+ * parse_add_sub
  **/
 DbOperator* parse_add_sub(char* query_command, char* handle, ClientContext* context, message* send_message, bool isAdd){
     if (strncmp(query_command, "(", 1) == 0) {
@@ -639,6 +689,14 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
     }else if(strncmp(query_command, "sub", 3) == 0){
         query_command += 3;
         dbo = parse_add_sub(query_command, handle, context, send_message, false);
+
+    }else if(strncmp(query_command, "max", 3) == 0){
+        query_command += 3;
+        dbo = parse_max_min(query_command, handle, context, send_message, true);
+
+    }else if(strncmp(query_command, "min", 3) == 0){
+        query_command += 3;
+        dbo = parse_max_min(query_command, handle, context, send_message, false);
 
     }else if (strncmp(query_command, "shutdown", 8) == 0) {
         Status ret_status;
