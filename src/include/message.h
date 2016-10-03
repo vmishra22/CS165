@@ -14,7 +14,8 @@ typedef enum message_status {
     EXECUTION_ERROR,
     INCORRECT_FILE_FORMAT,
     FILE_NOT_FOUND,
-    INDEX_ALREADY_EXISTS
+    INDEX_ALREADY_EXISTS,
+    SHUTDOWN_REQUESTED
 } message_status;
 
 // message is a single packet of information sent between client/server.

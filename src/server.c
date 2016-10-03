@@ -31,6 +31,7 @@
 
 #define DEFAULT_QUERY_BUFFER_SIZE 1024
 
+bool shutdown_requested = false;
 /**
  * handle_client(client_socket)
  * This is the execution routine after a client has connected.
@@ -92,6 +93,9 @@ void handle_client(int client_socket) {
             free(payload_to_client);
 
             //cs165_log(stdout, retMessage);
+            if(send_message.status == SHUTDOWN_REQUESTED)
+                shutdown_requested = true;
+
             send_message.length = strlen(retMessage);
             send_message.payload = NULL;
 
@@ -190,16 +194,24 @@ int main(void)
     socklen_t t = sizeof(remote);
     int client_socket = 0;
 
-    if ((client_socket = accept(server_socket, (struct sockaddr *)&remote, &t)) == -1) {
-        log_err("L%d: Failed to accept a new connection.\n", __LINE__);
-        exit(1);
-    }
+    // if ((client_socket = accept(server_socket, (struct sockaddr *)&remote, &t)) == -1) {
+    //     log_err("L%d: Failed to accept a new connection.\n", __LINE__);
+    //     exit(1);
+    // }
 
     db_startup();
 
-    handle_client(client_socket);
+  //  handle_client(client_socket);
 
-    shutdown_server();
+    while(!shutdown_requested){
+        if ((client_socket = accept(server_socket, (struct sockaddr *)&remote, &t)) == -1) {
+            log_err("L%d: Failed to accept a new connection.\n", __LINE__);
+            exit(1);
+        }
+        handle_client(client_socket);
+    };
+
+    
 
     return 0;
 }

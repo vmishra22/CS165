@@ -701,8 +701,9 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
     }else if (strncmp(query_command, "shutdown", 8) == 0) {
         Status ret_status;
         ret_status = saveDatabase();
+        shutdown_server();
         if(ret_status.code != ERROR)
-            send_message->status = OK_DONE;
+            send_message->status = SHUTDOWN_REQUESTED;
         else
             send_message->status = EXECUTION_ERROR;
     }
