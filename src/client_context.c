@@ -79,6 +79,89 @@ static Result* computeResultIndices(Table* table, Column* column, Comparator* co
 	return pResult;
 }
 
+static int* get_col_col_add_sub(Column* column1, Column* column2, size_t nData, bool isAdd){
+	if(column1 == NULL || column2 == NULL){
+		return NULL;
+	}
+	size_t i=0;
+	int* opResult = (int*)malloc(sizeof(int)*nData);
+	if(isAdd){
+		for(i=0; i<nData; i++){
+			opResult[i] = column1->data[i] + column2->data[i];
+   		} 
+	}
+	else{
+		for(i=0; i<nData; i++){
+			opResult[i] = column1->data[i] - column2->data[i];
+   		} 
+	}
+	return opResult;        		
+}
+
+static int* get_col_res_add_sub(Column* column1, Result* column2, size_t nData, bool isAdd){
+	if(column1 == NULL || column2 == NULL){
+		return NULL;
+	}
+	size_t i=0;
+	int* opResult = (int*)malloc(sizeof(int)*nData);
+
+	int* pData2 = (int*)column2->payload;
+	if(isAdd){
+		for(i=0; i<nData; i++){
+			opResult[i] = column1->data[i] + pData2[i];
+   		} 
+	}
+	else{
+		for(i=0; i<nData; i++){
+			opResult[i] = column1->data[i] - pData2[i];
+   		} 
+	}
+	return opResult;    
+}
+
+static int* get_res_col_add_sub(Result* column1, Column* column2, size_t nData, bool isAdd){
+	if(column1 == NULL || column2 == NULL){
+		return NULL;
+	}
+	size_t i=0;
+	int* opResult = (int*)malloc(sizeof(int)*nData);
+
+	int* pData1 = (int*)column1->payload;
+	if(isAdd){
+		for(i=0; i<nData; i++){
+			opResult[i] = pData1[i] + column2->data[i];
+   		} 
+	}
+	else{
+		for(i=0; i<nData; i++){
+			opResult[i] = pData1[i] - column2->data[i];
+   		} 
+	}
+	return opResult;    
+}
+
+static int* get_res_res_add_sub(Result* column1, Result* column2, size_t nData, bool isAdd){
+	if(column1 == NULL || column2 == NULL){
+		return NULL;
+	}
+	size_t i=0;
+	int* opResult = (int*)malloc(sizeof(int)*nData);
+
+	int* pData1 = (int*)column1->payload;
+	int* pData2 = (int*)column2->payload;
+	if(isAdd){
+		for(i=0; i<nData; i++){
+			opResult[i] = pData1[i] + pData2[i];
+   		} 
+	}
+	else{
+		for(i=0; i<nData; i++){
+			opResult[i] = pData1[i] - pData2[i];
+   		} 
+	}
+
+	return opResult;    
+}
 /** execute_DbOperator takes as input the DbOperator and executes the query.
  **/
 void execute_DbOperator(DbOperator* query, char** msg) {
@@ -261,6 +344,48 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	free(valuesFloatVec);
             break;
         }
+        case ADD_SUB:
+        {
+        	char* outHandle = query->operator_fields.add_sub_operator.handle;
+        	bool isAdd = query->operator_fields.add_sub_operator.isAdd;
+        	GeneralizedColumn* pGenColumn1 = query->operator_fields.add_sub_operator.gen_col1;
+        	GeneralizedColumn* pGenColumn2 = query->operator_fields.add_sub_operator.gen_col2;
+        	size_t dataSize = query->operator_fields.add_sub_operator.num_data;
+
+        	int* outResult = NULL;
+        	if(pGenColumn1->column_type == COLUMN){
+        		if(pGenColumn2->column_type == COLUMN){
+	        		outResult = get_col_col_add_sub(pGenColumn1->column_pointer.column, 
+	        										pGenColumn2->column_pointer.column, dataSize, isAdd);
+        		}else{
+        			outResult = get_col_res_add_sub(pGenColumn1->column_pointer.column, 
+	        										pGenColumn2->column_pointer.result, dataSize, isAdd);
+        		}
+        	}else if(pGenColumn1->column_type == RESULT){
+        		if(pGenColumn2->column_type == COLUMN){
+	        		outResult = get_res_col_add_sub(pGenColumn1->column_pointer.result,  
+	        										pGenColumn2->column_pointer.column, dataSize, isAdd);
+        		}else{
+        			outResult = get_res_res_add_sub(pGenColumn1->column_pointer.result, 
+	        										pGenColumn2->column_pointer.result, dataSize, isAdd);
+        		}
+        	}
+
+        	Result* pResultNew = (Result*)malloc(sizeof(Result));
+			memset(pResultNew, 0, sizeof(Result));
+			pResultNew->num_tuples = dataSize;
+			pResultNew->payload = (void*)outResult;
+			GeneralizedColumnHandle* pGenHandleNew = &(context->chandle_table[context->chandles_in_use]);
+    		strcpy(pGenHandleNew->name, outHandle);
+    		pGenHandleNew->generalized_column.column_type = RESULT;
+    		pGenHandleNew->generalized_column.column_pointer.result = pResultNew;
+    		context->chandles_in_use++;
+    		free(pGenColumn1);
+    		free(pGenColumn2);
+			free(query->operator_fields.add_sub_operator.handle);
+
+        	break;
+        }
         case AVG_SUM:
         {
         	float avg_val = 0.0;
@@ -269,6 +394,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	bool isSum = query->operator_fields.avg_sum_operator.isSum;
         	GeneralizedColumn* pGenColumn = query->operator_fields.avg_sum_operator.gen_col;
         	size_t dataSize = query->operator_fields.avg_sum_operator.num_data;
+
         	if(pGenColumn->column_type == COLUMN){
         		Column* column = pGenColumn->column_pointer.column;
         		for(i=0; i<dataSize; i++){

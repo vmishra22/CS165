@@ -204,7 +204,8 @@ typedef enum OperatorType {
     SELECT, 
     FETCH, 
     PRINT, 
-    AVG_SUM
+    AVG_SUM,
+    ADD_SUB
 } OperatorType;
 /*
  * necessary fields for insertion
@@ -242,7 +243,7 @@ typedef struct PrintOperator {
     int numHandles;
 } PrintOperator;
 /*
- * necessary fields for avg
+ * necessary fields for avg/sum
  */
 typedef struct AvgSumOperator {
     GeneralizedColumn* gen_col;
@@ -250,6 +251,16 @@ typedef struct AvgSumOperator {
     size_t num_data;
     bool isSum;
 } AvgSumOperator;
+/*
+ * necessary fields for add/sub
+ */
+typedef struct AddSubOperator {
+    GeneralizedColumn* gen_col1;
+    GeneralizedColumn* gen_col2;
+    char* handle;
+    size_t num_data;
+    bool isAdd;
+} AddSubOperator;
 /*
  * union type holding the fields of any operator
  */
@@ -260,6 +271,7 @@ typedef union OperatorFields {
     FetchOperator fetch_operator;
     PrintOperator print_operator;
     AvgSumOperator avg_sum_operator;
+    AddSubOperator add_sub_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:

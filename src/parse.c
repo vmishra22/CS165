@@ -228,8 +228,118 @@ DbOperator* parse_insert(char* query_command, message* send_message) {
         return NULL;
     }
 }
+
+static GeneralizedColumn* get_generic_result_column(char* handleName, ClientContext* context, size_t* nData)
+{
+    int j;
+    GeneralizedColumn* pGenericColumn = NULL;
+    GeneralizedColumnHandle* pGenHandle = NULL;
+
+    int numCHandles = context->chandles_in_use;
+    for(j=0; j<numCHandles; j++){
+        pGenHandle = &(context->chandle_table[j]);
+        if(strcmp(pGenHandle->name, handleName) == 0 && 
+            (pGenHandle->generalized_column.column_type == RESULT)){
+            Result* pResult = pGenHandle->generalized_column.column_pointer.result;
+            pGenericColumn = malloc(sizeof(GeneralizedColumn));
+            pGenericColumn->column_type = RESULT;
+            pGenericColumn->column_pointer.result = pResult;
+            *nData = pResult->num_tuples;
+            break;
+        }
+    }
+
+    return pGenericColumn;
+}
+
+static GeneralizedColumn* get_generic_table_column(char* handleName, size_t* nData, message* send_message)
+{
+    GeneralizedColumn* pGenericColumn = NULL;
+
+    strsep(&handleName, ".");
+    char* tbl_name = strsep(&handleName, ".");
+    char* col_name = handleName;
+    Table* scan_table = lookup_table(tbl_name);
+    if (scan_table == NULL) {
+        send_message->status = OBJECT_NOT_FOUND;
+        return NULL;
+    }
+    Column* scan_column = retrieve_column_for_scan(scan_table, col_name);
+    if (scan_column == NULL) {
+        send_message->status = OBJECT_NOT_FOUND;
+        return NULL;
+    }
+    pGenericColumn = malloc(sizeof(GeneralizedColumn));
+    pGenericColumn->column_type = COLUMN;
+    pGenericColumn->column_pointer.column = scan_column;
+    *nData = scan_table->table_length;
+
+    return pGenericColumn;
+}
 /**
- * parse_avg
+ * parse_add
+ **/
+DbOperator* parse_add_sub(char* query_command, char* handle, ClientContext* context, message* send_message, bool isAdd){
+    if (strncmp(query_command, "(", 1) == 0) {
+        query_command++;
+        
+        GeneralizedColumn* pGenColumn1 = NULL;
+        GeneralizedColumn* pGenColumn2 = NULL;
+        size_t nData1 = 0, nData2 = 0;
+
+        char** command_index = &query_command;
+        char* handle1 = next_token(command_index, &send_message->status);
+        char* handle2 = query_command;
+        if(handle1 == NULL || handle2 == NULL){
+            send_message->status = INCORRECT_FORMAT;
+            return NULL;
+        }
+        int last_char = strlen(handle2) - 1;
+        if (last_char < 0 || handle2[last_char] != ')') {
+            send_message->status = INCORRECT_FORMAT;
+            return NULL;
+        }
+        handle2[last_char] = '\0';
+        char* pDotChr1 = strchr(handle1, '.');
+        if(pDotChr1 == NULL){
+            pGenColumn1 = get_generic_result_column(handle1, context, &nData1);
+        }else{
+            pGenColumn1 = get_generic_table_column(handle1, &nData1, send_message);
+        }
+
+        char* pDotChr2 = strchr(handle2, '.');
+        if(pDotChr2 == NULL){
+            pGenColumn2 = get_generic_result_column(handle2, context, &nData2);
+        }else{
+            pGenColumn2 = get_generic_table_column(handle2, &nData2, send_message);
+        }
+
+        if(pGenColumn1 == NULL || pGenColumn2 == NULL || (nData1 != nData2) )
+        {
+            send_message->status = INCORRECT_FORMAT;
+            return NULL;
+        }
+
+        DbOperator* dbo = malloc(sizeof(DbOperator));
+        dbo->type = ADD_SUB;
+        dbo->operator_fields.add_sub_operator.gen_col1 = pGenColumn1;
+        dbo->operator_fields.add_sub_operator.gen_col2 = pGenColumn2;
+        dbo->operator_fields.add_sub_operator.num_data = nData1;
+        dbo->operator_fields.add_sub_operator.isAdd = isAdd;
+        dbo->operator_fields.add_sub_operator.handle = (char*)malloc(strlen(handle) + 1);
+        strcpy(dbo->operator_fields.add_sub_operator.handle, handle);
+
+        send_message->status = OK_WAIT_FOR_RESPONSE;
+        return dbo;
+    }else {
+        send_message->status = UNKNOWN_COMMAND;
+        return NULL;
+    }
+
+    return NULL;
+}
+/**
+ * parse_avg_sum
  **/
 DbOperator* parse_avg_sum(char* query_command, char* handle, ClientContext* context, message* send_message, bool isSum){
     if (strncmp(query_command, "(", 1) == 0) {
@@ -521,6 +631,14 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
     }else if(strncmp(query_command, "sum", 3) == 0){
         query_command += 3;
         dbo = parse_avg_sum(query_command, handle, context, send_message, true);
+
+    }else if(strncmp(query_command, "add", 3) == 0){
+        query_command += 3;
+        dbo = parse_add_sub(query_command, handle, context, send_message, true);
+
+    }else if(strncmp(query_command, "sub", 3) == 0){
+        query_command += 3;
+        dbo = parse_add_sub(query_command, handle, context, send_message, false);
 
     }else if (strncmp(query_command, "shutdown", 8) == 0) {
         Status ret_status;
