@@ -37,6 +37,49 @@ bool shutdown_requested = false;
  * This is the execution routine after a client has connected.
  * It will continually listen for messages from the client and execute queries.
  **/
+ void free_client_context(ClientContext* client_context){
+    if(client_context != NULL){
+        int i=0;
+        for(i=0; i<client_context->chandles_in_use; i++){
+            GeneralizedColumnHandle* pGenHandle = &(client_context->chandle_table[i]);
+            Result* pResult = pGenHandle->generalized_column.column_pointer.result;
+            if(pResult != NULL)
+            {
+                float* pPayloadFloat = NULL;
+                int* pPayloadInt = NULL;
+                void* payLoad = pResult->payload;
+                if(pResult->data_type == INT)
+                {
+                    pPayloadInt = (int*)payLoad;
+                    if(pPayloadInt != NULL)
+                        free(pPayloadInt);
+                }else{
+                    pPayloadFloat = (float*)payLoad;
+                    if(pPayloadFloat != NULL)
+                        free(pPayloadFloat);
+                }
+                free(pResult);
+            }
+        }
+        free(client_context->chandle_table);
+        free(client_context);
+    }
+ }
+
+ ClientContext* allocate_client_context(){
+    ClientContext* client_context = (ClientContext*)malloc(sizeof(ClientContext));
+
+    memset(client_context, 0, sizeof(ClientContext));
+    client_context->chandle_slots = 10;
+    client_context->chandles_in_use = 0;
+    GeneralizedColumnHandle* pColumnHandle = 
+        (GeneralizedColumnHandle*) malloc(sizeof(GeneralizedColumnHandle)*(client_context->chandle_slots));
+    memset(pColumnHandle, 0, sizeof(GeneralizedColumnHandle)*(client_context->chandle_slots));
+    client_context->chandle_table = pColumnHandle;
+
+    return client_context;
+ }
+
 void handle_client(int client_socket) {
     int done = 0;
     int length = 0;
@@ -51,14 +94,7 @@ void handle_client(int client_socket) {
     ClientContext* client_context = NULL; //TO DO: There can be multiple clients connected to the server
     send_message.status = OK_WAIT_FOR_RESPONSE;
 
-    client_context = (ClientContext*)malloc(sizeof(ClientContext));
-    memset(client_context, 0, sizeof(ClientContext));
-    client_context->chandle_slots = 10;
-    client_context->chandles_in_use = 0;
-    GeneralizedColumnHandle* pColumnHandle = 
-        (GeneralizedColumnHandle*) malloc(sizeof(GeneralizedColumnHandle)*(client_context->chandle_slots));
-    memset(pColumnHandle, 0, sizeof(GeneralizedColumnHandle)*(client_context->chandle_slots));
-    client_context->chandle_table = pColumnHandle;
+    client_context = allocate_client_context();
 
     // Continually receive messages from client and execute queries.
     // 1. Parse the command
@@ -69,6 +105,7 @@ void handle_client(int client_socket) {
         length = recv(client_socket, &recv_message, sizeof(message), 0);
         if (length < 0) {
             log_err("Client connection closed!\n");
+            free_client_context(client_context);
             exit(1);
         } else if (length == 0) {
             done = 1;
@@ -113,20 +150,7 @@ void handle_client(int client_socket) {
         }
     } while (!done);
 
-    if(client_context != NULL){
-        int i=0;
-        for(i=0; i<client_context->chandles_in_use; i++){
-            GeneralizedColumnHandle* pGenHandle = &(client_context->chandle_table[i]);
-            if(pGenHandle->generalized_column.column_pointer.result != NULL)
-            {
-                if((pGenHandle->generalized_column.column_pointer.result)->payload != NULL)
-                    free((pGenHandle->generalized_column.column_pointer.result)->payload);
-                free(pGenHandle->generalized_column.column_pointer.result);
-            }
-        }
-        free(client_context->chandle_table);
-        free(client_context);
-    }
+    free_client_context(client_context);
 
     log_info("Connection closed at socket %d!\n", client_socket);
     close(client_socket);
