@@ -383,8 +383,8 @@ void execute_DbOperator(DbOperator* query, char** msg) {
     	{
         	handleNames = query->operator_fields.print_operator.handleNames;
         	int numHandles = query->operator_fields.print_operator.numHandles;
-        	char* retStr = (char*)malloc(1024);
-        	memset(retStr, '\0', 1024);
+        	char* retStr = (char*)malloc(4096);
+        	memset(retStr, '\0', 4096);
         	int** valuesIntVec = (int**)malloc(sizeof(int*) * numHandles);
         	float** valuesFloatVec = (float**)malloc(sizeof(float*) * numHandles);
         	int num_tuples = 0;
