@@ -415,7 +415,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         			if(hTypes[k] == INT)
         				sprintf(str, "%d", valuesIntVec[iIndex++][j]);
         			else if(hTypes[k] == FLOAT)
-        				sprintf(str, "%.1f", valuesFloatVec[fIndex++][j]);
+        				sprintf(str, "%.2f", valuesFloatVec[fIndex++][j]);
         			if(k != numHandles-1)
         				strcat(str, ",");
         			strcat(retStr, str);
