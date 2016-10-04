@@ -189,6 +189,7 @@ typedef struct Comparator {
     long int p_low; // used in equality and ranges.
     long int p_high; // used in range compares. 
     GeneralizedColumn* gen_col;
+    size_t numInputCols;
     ComparatorType type1;
     ComparatorType type2;
     char* handle;

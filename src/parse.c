@@ -534,86 +534,122 @@ DbOperator* parse_fetch(char* query_command, char* handle, message* send_message
 
     return NULL;
 }
+void copyResultGenericColumn(GeneralizedColumn* srcGenColumn, GeneralizedColumn* dstGenColumn)
+{
+    dstGenColumn->column_type = srcGenColumn->column_type;
+    dstGenColumn->column_pointer.result = srcGenColumn->column_pointer.result;
+}
+
+void copyTblColGenericColumn(GeneralizedColumn* srcGenColumn, GeneralizedColumn* dstGenColumn)
+{
+    dstGenColumn->column_type = srcGenColumn->column_type;
+    dstGenColumn->column_pointer.column = srcGenColumn->column_pointer.column;
+}
 /**
  * parse_select 
  **/
-
-DbOperator* parse_select(char* query_command, char* handle, message* send_message) {
+DbOperator* parse_select(char* query_command, char* handle, ClientContext* context, message* send_message) {
     if (strncmp(query_command, "(", 1) == 0) {
         query_command++;
         char** command_index = &query_command;
         char* db_tbl_col_name = next_token(command_index, &send_message->status);
+        char *tempToFree, *handle1;
+        tempToFree = handle1 = (char*) malloc(strlen(db_tbl_col_name) + 1);
+        strcpy(handle1, db_tbl_col_name);
     
-
         if (send_message->status == INCORRECT_FORMAT) {
             return NULL;
         }
 
         strsep(&db_tbl_col_name, ".");
-
+        GeneralizedColumn* pGenColumn = NULL;
+        size_t numGenericColumns = 0;
+        Table* scan_table = NULL;
         //SELECT - type 2.
         if(db_tbl_col_name == NULL){
+            char* handle2 = next_token(command_index, &send_message->status);
+            numGenericColumns = 2;
+            pGenColumn = malloc(sizeof(GeneralizedColumn) * numGenericColumns);
+            memset(pGenColumn, 0, sizeof(GeneralizedColumn) * numGenericColumns);
+            size_t nData1 = 0, nData2 = 0;
+            GeneralizedColumn* tempGenColumn = NULL;
+            tempGenColumn = get_generic_result_column(handle1, context, &nData1);
+            copyResultGenericColumn(tempGenColumn, &pGenColumn[0]);
+            free(tempGenColumn); tempGenColumn = NULL;
+            char* pDotChr2 = strchr(handle2, '.');
+            if(pDotChr2 == NULL){
+                tempGenColumn = get_generic_result_column(handle2, context, &nData2);
+                copyResultGenericColumn(tempGenColumn, &pGenColumn[1]);
+                free(tempGenColumn); tempGenColumn = NULL;
+            }else{
+                tempGenColumn = get_generic_table_column(handle2, &nData2, send_message);
+                copyTblColGenericColumn(tempGenColumn, &pGenColumn[1]);
+                free(tempGenColumn); tempGenColumn = NULL;
+            }
 
         }else{
-            char* tbl_name = strsep(&db_tbl_col_name, ".");
-            char* col_name = db_tbl_col_name;
-
-            Table* scan_table = lookup_table(tbl_name);
+            numGenericColumns = 1;
+            strsep(&handle1, ".");
+            char* tbl_name = strsep(&handle1, ".");
+            char* col_name = handle1;
+            scan_table = lookup_table(tbl_name);
             if (scan_table == NULL) {
                 send_message->status = OBJECT_NOT_FOUND;
                 return NULL;
             }
-
             Column* scan_column = retrieve_column_for_scan(scan_table, col_name);
             if (scan_column == NULL) {
                 send_message->status = OBJECT_NOT_FOUND;
                 return NULL;
             }
-
-            char* low_val = next_token(command_index, &send_message->status);
-            char* high_val = next_token(command_index, &send_message->status);
-            int last_char = strlen(high_val) - 1;
-            if (high_val[last_char] != ')') {
-                send_message->status = INCORRECT_FORMAT;
-                return NULL;
-            }
-            high_val[last_char] = '\0';
-            
-            DbOperator* dbo = malloc(sizeof(DbOperator));
-            dbo->type = SELECT;
-            dbo->operator_fields.select_operator.table = scan_table;
-
-            Comparator* comparator = malloc(sizeof(Comparator));
-            memset(comparator, 0, sizeof(Comparator));
-            if(strcmp(low_val, "null") == 0){
-                comparator->type1 = NO_COMPARISON;
-            }
-            else{
-                comparator->type1 = GREATER_THAN_OR_EQUAL;
-                int low_value = atoi(low_val);
-                comparator->p_low = low_value;
-            }
-            if(strcmp(high_val, "null") == 0){
-                comparator->type2 = NO_COMPARISON;
-            }
-            else{
-                comparator->type2 = LESS_THAN;
-                int high_value = atoi(high_val);
-                comparator->p_high = high_value;
-            }
-
-            GeneralizedColumn* pGenColumn = malloc(sizeof(GeneralizedColumn));
+            pGenColumn = malloc(sizeof(GeneralizedColumn));
             pGenColumn->column_type = COLUMN;
             pGenColumn->column_pointer.column = scan_column;
-            comparator->gen_col = pGenColumn;
-            comparator->handle = (char*)malloc(strlen(handle) + 1);
-            strcpy(comparator->handle, handle);
-
-            dbo->operator_fields.select_operator.comparator = comparator;
-
-            send_message->status = OK_WAIT_FOR_RESPONSE;
-            return dbo;
         }
+
+        char* low_val = next_token(command_index, &send_message->status);
+        char* high_val = next_token(command_index, &send_message->status);
+        int last_char = strlen(high_val) - 1;
+        if (high_val[last_char] != ')') {
+            send_message->status = INCORRECT_FORMAT;
+            return NULL;
+        }
+        high_val[last_char] = '\0';
+        
+        DbOperator* dbo = malloc(sizeof(DbOperator));
+        dbo->type = SELECT;
+        dbo->operator_fields.select_operator.table = scan_table;
+
+        Comparator* comparator = malloc(sizeof(Comparator));
+        memset(comparator, 0, sizeof(Comparator));
+        if(strcmp(low_val, "null") == 0){
+            comparator->type1 = NO_COMPARISON;
+        }
+        else{
+            comparator->type1 = GREATER_THAN_OR_EQUAL;
+            int low_value = atoi(low_val);
+            comparator->p_low = low_value;
+        }
+        if(strcmp(high_val, "null") == 0){
+            comparator->type2 = NO_COMPARISON;
+        }
+        else{
+            comparator->type2 = LESS_THAN;
+            int high_value = atoi(high_val);
+            comparator->p_high = high_value;
+        }
+
+        comparator->gen_col = pGenColumn;
+        comparator->numInputCols = numGenericColumns;
+        comparator->handle = (char*)malloc(strlen(handle) + 1);
+        strcpy(comparator->handle, handle);
+
+        dbo->operator_fields.select_operator.comparator = comparator;
+        free(tempToFree);
+
+        send_message->status = OK_WAIT_FOR_RESPONSE;
+        return dbo;
+        
     }else {
         send_message->status = UNKNOWN_COMMAND;
         return NULL;
@@ -664,7 +700,7 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
 
     }else if (strncmp(query_command, "select", 6) == 0){
         query_command += 6;
-        dbo = parse_select(query_command, handle, send_message);
+        dbo = parse_select(query_command, handle, context, send_message);
 
     }else if(strncmp(query_command, "fetch", 5) == 0){
         query_command += 5;

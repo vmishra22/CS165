@@ -79,6 +79,56 @@ static Result* computeResultIndices(Table* table, Column* column, Comparator* co
 	return pResult;
 }
 
+static Result* ComputeResultIndicesType2(GeneralizedColumn* genColPos, GeneralizedColumn* genColval, Comparator* comparator){
+	size_t i=0, j=0;
+
+	Result* resultPos = genColPos->column_pointer.result;
+	int* pListPos = (int*)(resultPos->payload);
+	size_t columnSize = resultPos->num_tuples;
+
+	int* pListVal = NULL;
+	if(genColval->column_type == COLUMN)
+	{
+		Column* columnVal = genColval->column_pointer.column;
+		pListVal = (int*)(columnVal->data);
+	}
+	else{
+		Result* resultVal = genColval->column_pointer.result;
+		pListVal = (int*)(resultVal->payload);
+	}
+
+	int *resultIndices = (int*)malloc(sizeof(int) * columnSize);
+	memset(resultIndices, -1, sizeof(int)*columnSize);
+	Result* pResult = (Result*)malloc(sizeof(Result));
+	memset(pResult, 0, sizeof(Result));
+	
+	if(comparator->type1 == NO_COMPARISON && comparator->type2 == NO_COMPARISON){
+		for (i=0; i<columnSize; i++){
+			resultIndices[j++]=pListPos[i];
+		}
+	}else if(comparator->type1 == NO_COMPARISON && comparator->type2 == LESS_THAN){
+		for (i=0; i<columnSize; i++){
+			if(pListVal[i] < comparator->p_high)
+				resultIndices[j++]=pListPos[i];
+		}
+	}else if(comparator->type1 == GREATER_THAN_OR_EQUAL && comparator->type2 == NO_COMPARISON){
+		for (i=0; i<columnSize; i++){
+			if(pListVal[i] >= comparator->p_low)
+				resultIndices[j++]=pListPos[i];
+		}
+	}else if(comparator->type1 == GREATER_THAN_OR_EQUAL && comparator->type2 == LESS_THAN){
+		for (i=0; i<columnSize; i++){
+			if(pListVal[i] >= comparator->p_low && pListVal[i] < comparator->p_high)
+				resultIndices[j++]=pListPos[i];
+		}
+	}
+	
+	pResult->payload = resultIndices;
+	pResult->num_tuples = j;
+	pResult->data_type = INT;
+	return pResult;
+}
+
 static int* get_col_col_add_sub(Column* column1, Column* column2, size_t nData, bool isAdd){
 	if(column1 == NULL || column2 == NULL){
 		return NULL;
@@ -277,50 +327,62 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         case OPEN:
             break;
         case SELECT:
-        	
+        {
         	comparator = query->operator_fields.select_operator.comparator;
         	table = query->operator_fields.select_operator.table;
+        	size_t nInputCols = comparator->numInputCols;
         	GeneralizedColumn* pGenColumn = comparator->gen_col;
-        	if( pGenColumn->column_type == COLUMN){
-        		column = pGenColumn->column_pointer.column;
-        		if(column == NULL){
-        			strcpy(*msg, "Column not found to scan");
-        			break;
-        		}
-        		Result* resultIndices = computeResultIndices(table, column, comparator);
-        		if(context->chandles_in_use == context->chandle_slots){
-		            context->chandle_slots *= 2; 
-		            context->chandle_table = (GeneralizedColumnHandle*)
-		                            realloc(context->chandle_table, (context->chandle_slots) * sizeof(GeneralizedColumnHandle));
-        		}
-        		GeneralizedColumnHandle* pGenHandle = NULL;
-        		pGenHandle = check_for_existing_handle(context, comparator->handle);
-        		if(pGenHandle != NULL){
-        			if(pGenHandle->generalized_column.column_pointer.result != NULL)
-		            {
-		                if((pGenHandle->generalized_column.column_pointer.result)->payload != NULL)
-		                    free((pGenHandle->generalized_column.column_pointer.result)->payload);
-		                free(pGenHandle->generalized_column.column_pointer.result);
-		            }
-        		}
-        		else{
-        			pGenHandle = &(context->chandle_table[context->chandles_in_use]);
-        			strcpy(pGenHandle->name, comparator->handle);
-        			context->chandles_in_use++;
-	        		pGenHandle->generalized_column.column_type = RESULT;
-        		}
-        		
-        		pGenHandle->generalized_column.column_pointer.result = resultIndices;
-        		if(column->data != NULL)
-        		{
-    				free(column->data);
-    				column->data = NULL;
-        		}
-        		free(comparator->handle);
-        		free(pGenColumn);
-        		free(comparator);
+        	Result* resultIndices = NULL;
+        	if(nInputCols == 1){
+	        	if( pGenColumn->column_type == COLUMN){
+	        		column = pGenColumn->column_pointer.column;
+	        		if(column == NULL){
+	        			strcpy(*msg, "Column not found to scan");
+	        			break;
+	        		}
+	        		resultIndices = computeResultIndices(table, column, comparator);
+	        		if(column->data != NULL)
+	        		{
+	    				free(column->data);
+	    				column->data = NULL;
+	        		}
+	        	}
+	        }
+	        else{
+        		GeneralizedColumn* pGenColumnPos = &pGenColumn[0];
+        		GeneralizedColumn* pGenColumnVal = &pGenColumn[1];
+        		resultIndices = ComputeResultIndicesType2(pGenColumnPos, pGenColumnVal, comparator);
         	}
+    		if(context->chandles_in_use == context->chandle_slots){
+	            context->chandle_slots *= 2; 
+	            context->chandle_table = (GeneralizedColumnHandle*)
+	                            realloc(context->chandle_table, (context->chandle_slots) * sizeof(GeneralizedColumnHandle));
+    		}
+    		GeneralizedColumnHandle* pGenHandle = NULL;
+    		pGenHandle = check_for_existing_handle(context, comparator->handle);
+    		if(pGenHandle != NULL){
+    			if(pGenHandle->generalized_column.column_pointer.result != NULL)
+	            {
+	                if((pGenHandle->generalized_column.column_pointer.result)->payload != NULL)
+	                    free((pGenHandle->generalized_column.column_pointer.result)->payload);
+	                free(pGenHandle->generalized_column.column_pointer.result);
+	            }
+    		}
+    		else{
+    			pGenHandle = &(context->chandle_table[context->chandles_in_use]);
+    			strcpy(pGenHandle->name, comparator->handle);
+    			context->chandles_in_use++;
+        		pGenHandle->generalized_column.column_type = RESULT;
+    		}
+    		
+    		pGenHandle->generalized_column.column_pointer.result = resultIndices;
+ 			free(comparator->handle);
+    		free(pGenColumn);
+    		free(comparator);
+        	
             break;
+        }
+
         case FETCH:
 
         	column = query->operator_fields.fetch_operator.column;
@@ -453,6 +515,12 @@ void execute_DbOperator(DbOperator* query, char** msg) {
     		pResultNew->payload = (void*)pPayloadInt;
 			pResultNew->data_type = INT;
 
+			if(context->chandles_in_use == context->chandle_slots){
+	            context->chandle_slots *= 2; 
+	            context->chandle_table = (GeneralizedColumnHandle*)
+	                            realloc(context->chandle_table, (context->chandle_slots) * sizeof(GeneralizedColumnHandle));
+			}
+
 			GeneralizedColumnHandle* pGenHandleNew = NULL;
     		pGenHandleNew = check_for_existing_handle(context, outHandle);
     		if(pGenHandleNew != NULL){
@@ -507,6 +575,12 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 			memset(pResultNew, 0, sizeof(Result));
 			pResultNew->num_tuples = dataSize;
 			pResultNew->payload = (void*)outResult;
+
+			if(context->chandles_in_use == context->chandle_slots){
+	            context->chandle_slots *= 2; 
+	            context->chandle_table = (GeneralizedColumnHandle*)
+	                            realloc(context->chandle_table, (context->chandle_slots) * sizeof(GeneralizedColumnHandle));
+			}
 
 			GeneralizedColumnHandle* pGenHandleNew = NULL;
     		pGenHandleNew = check_for_existing_handle(context, outHandle);
@@ -574,6 +648,12 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 				pResultNew->data_type = FLOAT;
         	}
         	
+        	if(context->chandles_in_use == context->chandle_slots){
+	            context->chandle_slots *= 2; 
+	            context->chandle_table = (GeneralizedColumnHandle*)
+	                            realloc(context->chandle_table, (context->chandle_slots) * sizeof(GeneralizedColumnHandle));
+			}
+			
         	GeneralizedColumnHandle* pGenHandleNew = NULL;
     		pGenHandleNew = check_for_existing_handle(context, handle);
     		if(pGenHandleNew != NULL){
