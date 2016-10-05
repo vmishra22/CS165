@@ -3,7 +3,7 @@
 
 #include "cs165_api.h"
 
-
+#define MAX_RESPONSE_SIZE 8192
 
 Table* lookup_table(char *name);
 

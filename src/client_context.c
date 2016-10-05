@@ -3,6 +3,7 @@
 #include <string.h>
 #include "utils.h"
 
+
 Table* lookup_table(char *name) {
 	size_t i;
 	for(i=0; i<(current_db->tables_size); i++){
@@ -445,8 +446,8 @@ void execute_DbOperator(DbOperator* query, char** msg) {
     	{
         	handleNames = query->operator_fields.print_operator.handleNames;
         	int numHandles = query->operator_fields.print_operator.numHandles;
-        	char* retStr = (char*)malloc(4096);
-        	memset(retStr, '\0', 4096);
+        	char* retStr = (char*)malloc(MAX_RESPONSE_SIZE);
+        	memset(retStr, '\0', MAX_RESPONSE_SIZE);
         	int** valuesIntVec = (int**)malloc(sizeof(int*) * numHandles);
         	float** valuesFloatVec = (float**)malloc(sizeof(float*) * numHandles);
         	int num_tuples = 0;
@@ -473,7 +474,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	iIndex = 0; fIndex = 0;
         	for(j=0; j<num_tuples; j++){
         		for(k=0; k<numHandles; k++){
-        			char str[10];
+        			char str[20];
         			if(hTypes[k] == INT)
         				sprintf(str, "%d", valuesIntVec[iIndex++][j]);
         			else if(hTypes[k] == FLOAT)
@@ -653,7 +654,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 	            context->chandle_table = (GeneralizedColumnHandle*)
 	                            realloc(context->chandle_table, (context->chandle_slots) * sizeof(GeneralizedColumnHandle));
 			}
-			
+
         	GeneralizedColumnHandle* pGenHandleNew = NULL;
     		pGenHandleNew = check_for_existing_handle(context, handle);
     		if(pGenHandleNew != NULL){
