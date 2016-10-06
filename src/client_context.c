@@ -49,7 +49,7 @@ static Result* computeResultIndices(Table* table, Column* column, Comparator* co
 	size_t i=0, j=0;
 	size_t columnSize = table->table_length;
 	int *resultIndices = (int*)malloc(sizeof(int) * columnSize);
-	memset(resultIndices, -1, sizeof(int)*columnSize);
+	memset(resultIndices, 0, sizeof(int)*columnSize);
 	Result* pResult = (Result*)malloc(sizeof(Result));
 	memset(pResult, 0, sizeof(Result));
 	
@@ -448,10 +448,12 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	int numHandles = query->operator_fields.print_operator.numHandles;
         	char* retStr = (char*)malloc(MAX_RESPONSE_SIZE);
         	memset(retStr, '\0', MAX_RESPONSE_SIZE);
+        	//strcpy(retStr, " ");
         	int** valuesIntVec = (int**)malloc(sizeof(int*) * numHandles);
         	float** valuesFloatVec = (float**)malloc(sizeof(float*) * numHandles);
+        	long int** valuesLongVec = (long int**)malloc(sizeof(long int*) * numHandles);
         	int num_tuples = 0;
-        	int iIndex = 0, fIndex = 0;
+        	int iIndex = 0, fIndex = 0, lIndex = 0;;
         	DataType hTypes[numHandles];
         	Result* pResult = NULL;
         	for(j=0; j<numHandles; j++){
@@ -465,13 +467,15 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 		            		valuesIntVec[iIndex++] = (int*)pResult->payload;
 		            	}else if(pResult->data_type == FLOAT){
 		            		valuesFloatVec[fIndex++] = (float*)pResult->payload;
+		            	}else if(pResult->data_type == LONG){
+		            		valuesLongVec[lIndex++] = (long int*)pResult->payload;
 		            	}
 		            	hTypes[j] = pResult->data_type;
 		            	break;
 					}
         		}
         	}
-        	iIndex = 0; fIndex = 0;
+        	iIndex = 0; fIndex = 0;lIndex= 0;
         	for(j=0; j<num_tuples; j++){
         		for(k=0; k<numHandles; k++){
         			char str[20];
@@ -479,12 +483,14 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         				sprintf(str, "%d", valuesIntVec[iIndex++][j]);
         			else if(hTypes[k] == FLOAT)
         				sprintf(str, "%.2f", valuesFloatVec[fIndex++][j]);
+        			else if(hTypes[k] == LONG)
+        				sprintf(str, "%ld", valuesLongVec[lIndex++][j]);
         			if(k != numHandles-1)
         				strcat(str, ",");
         			strcat(retStr, str);
         		}
         		strcat(retStr, "\n");
-        		iIndex = 0; fIndex = 0;
+        		iIndex = 0; fIndex = 0;lIndex = 0;
         	}
         	strcpy(*msg, retStr);
         	free(retStr);
@@ -493,6 +499,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	}
         	free(valuesIntVec);
         	free(valuesFloatVec);
+        	free(valuesLongVec);
             break;
         }
         case MAX_MIN:
@@ -609,25 +616,28 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         case AVG_SUM:
         {
         	float avg_val = 0.0;
-        	float sum = 0.0;
+        	long int sum = 0.0;
         	char* handle = query->operator_fields.avg_sum_operator.handle;
         	bool isSum = query->operator_fields.avg_sum_operator.isSum;
         	GeneralizedColumn* pGenColumn = query->operator_fields.avg_sum_operator.gen_col;
         	size_t dataSize = query->operator_fields.avg_sum_operator.num_data;
+
+        	if(pGenColumn == NULL)
+        		return;
 
         	if(pGenColumn->column_type == COLUMN){
         		Column* column = pGenColumn->column_pointer.column;
         		for(i=0; i<dataSize; i++){
     				sum += column->data[i];
     			} 
-    			avg_val = sum/dataSize;
+    			avg_val = (float)sum/dataSize;
         	}else if(pGenColumn->column_type == RESULT){
         		Result* pResult = pGenColumn->column_pointer.result;
     			int* pPayload = (int*)pResult->payload;
     			for(i=0; i<dataSize; i++){
     				sum += pPayload[i];
     			}
-    			avg_val = sum/dataSize;
+    			avg_val = (float)sum/dataSize;
         	}else
         		return;
 
@@ -636,12 +646,12 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 			pResultNew->num_tuples = 1;
 
         	float* pPayloadAvg = NULL;
-        	int* pPayloadInt = NULL;
+        	long int* pPayloadInt = NULL;
         	if(isSum){
-        		pPayloadInt = (int*)malloc(sizeof(int));
-        		*pPayloadInt = (int)sum;
+        		pPayloadInt = (long int*)malloc(sizeof(int));
+        		*pPayloadInt = (long int)sum;
         		pResultNew->payload = (void*)pPayloadInt;
-				pResultNew->data_type = INT;
+				pResultNew->data_type = LONG;
         	}else{
         		pPayloadAvg = (float*)malloc(sizeof(float));
 				*pPayloadAvg = avg_val;
