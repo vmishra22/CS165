@@ -51,7 +51,8 @@ SOFTWARE.
 typedef enum DataType {
      INT,
      LONG,
-     FLOAT
+     FLOAT,
+     DOUBLE
 } DataType;
 
 struct Comparator;
