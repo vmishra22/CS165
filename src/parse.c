@@ -24,6 +24,78 @@ char* next_token(char** tokenizer, message_status* status) {
     return token;
 }
 
+/**
+ * parse_create_idx
+ **/
+message_status parse_create_idx(char* create_arguments) {
+    message_status status = OK_DONE;
+    char** create_arguments_index = &create_arguments;
+    char* db_tbl_col_name = next_token(create_arguments_index, &status);
+    char* idx_type = next_token(create_arguments_index, &status);
+    char* cluster_type = next_token(create_arguments_index, &status);
+
+    int last_char = strlen(cluster_type) - 1;
+    if (cluster_type[last_char] != ')') {
+        return INCORRECT_FORMAT;
+    }
+    cluster_type[last_char] = '\0';
+
+    char* db_name = strsep(&db_tbl_col_name, ".");
+    (void)db_name;
+    char* tbl_name = strsep(&db_tbl_col_name, ".");
+    char* col_name = db_tbl_col_name;
+
+    Table* table = lookup_table(tbl_name);
+    if (table == NULL) {
+        status = OBJECT_NOT_FOUND;
+    }
+    else{
+        Column* column = retrieve_column_for_scan(table, col_name, false);
+        if (column == NULL) {
+            status = OBJECT_NOT_FOUND;
+        }else{
+            column->index = (ColumnIndex*)malloc(sizeof(ColumnIndex));
+            memset(column->index, 0, sizeof(ColumnIndex));
+
+            ColumnIndex* pIndex = column->index;
+            if(pIndex != NULL){
+                if(strcmp(idx_type, "sorted") == 0)
+                    pIndex->indexType = SORTED;
+                else if(strcmp(idx_type, "btree") == 0)
+                    pIndex->indexType = BTREE;
+                else
+                    status = INCORRECT_FORMAT;
+
+                if(strcmp(cluster_type, "clustered") == 0){
+                    pIndex->clustered = true;
+                    pIndex->unclustered = false;
+                    if(strcmp(table->firstDeclaredClustCol, "") == 0)
+                        strcpy(table->firstDeclaredClustCol, column->name);
+                }
+                else if(strcmp(cluster_type, "unclustered") == 0){
+                    pIndex->unclustered = true;
+                    pIndex->clustered = false;
+                }
+                else
+                    status = INCORRECT_FORMAT;
+
+                //Initialize the tuples
+                pIndex->index_data_capacity = 200;
+                pIndex->index_size = 0;
+                pIndex->tuples = (dataRecord*)malloc(sizeof(dataRecord) * (pIndex->index_data_capacity));
+                memset(pIndex->tuples, 0, sizeof(dataRecord)*(pIndex->index_data_capacity));
+            }
+            else
+                status = OBJECT_NOT_FOUND;
+        }
+
+    }
+    return status;
+}
+
+/**
+ * parse_create_col
+ **/
 message_status parse_create_col(char* create_arguments) {
     message_status status = OK_DONE;
     char** create_arguments_index = &create_arguments;
@@ -64,6 +136,7 @@ message_status parse_create_col(char* create_arguments) {
 }
 
 /**
+ * parse_create_tbl
  * This method takes in a string representing the arguments to create a table.
  * It parses those arguments, checks that they are valid, and creates a table.
  **/
@@ -168,6 +241,8 @@ message_status parse_create(char* create_arguments) {
                 mes_status = parse_create_tbl(tokenizer_copy);
             } else if (strcmp(token, "col") == 0) {
                 mes_status = parse_create_col(tokenizer_copy);
+            } else if (strcmp(token, "idx") == 0) {
+                mes_status = parse_create_idx(tokenizer_copy);
             } else {
                 mes_status = UNKNOWN_COMMAND;
             }
@@ -177,6 +252,98 @@ message_status parse_create(char* create_arguments) {
     }
     free(to_free);
     return mes_status;
+}
+
+/**
+ * parse_load
+ **/
+
+DbOperator* parse_load(char* query_command, message* send_message) {
+    size_t i = 0, j = 0;
+    unsigned int columns_inserted = 0;
+    char* token = NULL;
+    if (strncmp(query_command, "(", 1) == 0) {
+        query_command++;
+        char** command_index = &query_command;
+        char* db_tbl_col_name = next_token(command_index, &send_message->status);
+
+        if (send_message->status == INCORRECT_FORMAT) {
+            return NULL;
+        }
+
+        strsep(&db_tbl_col_name, ".");
+        char* tbl_name = strsep(&db_tbl_col_name, ".");
+        char* col_name = db_tbl_col_name;
+        
+        // lookup the table and make sure it exists. 
+        Table* table = lookup_table(tbl_name);
+        if (table == NULL) {
+            send_message->status = OBJECT_NOT_FOUND;
+            return NULL;
+        }
+        size_t numColumns = table->col_count;
+
+        Column* column = NULL;
+        //Get the column to fill the data
+        for(i=0; i<numColumns; i++){
+            column = &(table->columns[i]);
+            if(strcmp(column->name, col_name) == 0)
+                break;
+        }
+        
+
+        columns_inserted++;
+        size_t dataSize = -1;
+        while ((token = strsep(command_index, ",")) != NULL) {
+            if(strncmp(token, "load", 4) == 0){
+                token += 5;
+                db_tbl_col_name = token;
+                strsep(&db_tbl_col_name, ".");
+                tbl_name = strsep(&db_tbl_col_name, ".");
+                col_name = db_tbl_col_name;
+                for(j=0; j<numColumns; j++){
+                    column = &(table->columns[j]);
+                    if(strcmp(column->name, col_name) == 0)
+                    {
+                        dataSize = -1;
+                        columns_inserted++;
+                        break;
+                    }
+                }
+            }else{
+
+                int load_val = atoi(token);
+                dataSize++;
+                //check if the column data size need to be modified.
+                if(dataSize == table->col_data_capacity){
+                    table->col_data_capacity *= 200; 
+                    for(i=0; i<numColumns; i++){
+                        Column* resizeColumn = NULL;
+                        resizeColumn = &(table->columns[i]);
+                        resizeColumn->data = (int*)realloc(resizeColumn->data, (table->col_data_capacity) * sizeof(int));
+                    }
+                }
+                column->data[dataSize] = load_val;
+            }
+        }
+        table->table_length = dataSize+1;
+
+        if (columns_inserted != numColumns) {
+            send_message->status = INCORRECT_FORMAT;
+            return NULL;
+        } 
+
+        DbOperator* dbo = malloc(sizeof(DbOperator));
+        dbo->type = CREATE_IDX;
+        dbo->operator_fields.create_idx_operator.table = table;
+        dbo->operator_fields.create_idx_operator.column = column;
+        
+        send_message->status = OK_WAIT_FOR_RESPONSE;
+        return dbo;
+    } else {
+        send_message->status = UNKNOWN_COMMAND;
+        return NULL;
+    }
 }
 
 /**
@@ -264,7 +431,7 @@ static GeneralizedColumn* get_generic_table_column(char* handleName, size_t* nDa
         send_message->status = OBJECT_NOT_FOUND;
         return NULL;
     }
-    Column* scan_column = retrieve_column_for_scan(scan_table, col_name);
+    Column* scan_column = retrieve_column_for_scan(scan_table, col_name, true);
     if (scan_column == NULL) {
         send_message->status = OBJECT_NOT_FOUND;
         return NULL;
@@ -424,7 +591,7 @@ DbOperator* parse_avg_sum(char* query_command, char* handle, ClientContext* cont
                 send_message->status = OBJECT_NOT_FOUND;
                 return NULL;
             }
-            Column* scan_column = retrieve_column_for_scan(scan_table, col_name);
+            Column* scan_column = retrieve_column_for_scan(scan_table, col_name, true);
             if (scan_column == NULL) {
                 send_message->status = OBJECT_NOT_FOUND;
                 return NULL;
@@ -511,7 +678,7 @@ DbOperator* parse_fetch(char* query_command, char* handle, message* send_message
             send_message->status = OBJECT_NOT_FOUND;
             return NULL;
         }
-        Column* scan_column = retrieve_column_for_scan(scan_table, col_name);
+        Column* scan_column = retrieve_column_for_scan(scan_table, col_name, true);
         if (scan_column == NULL) {
             send_message->status = OBJECT_NOT_FOUND;
             return NULL;
@@ -597,7 +764,7 @@ DbOperator* parse_select(char* query_command, char* handle, ClientContext* conte
                 send_message->status = OBJECT_NOT_FOUND;
                 return NULL;
             }
-            Column* scan_column = retrieve_column_for_scan(scan_table, col_name);
+            Column* scan_column = retrieve_column_for_scan(scan_table, col_name, true);
             if (scan_column == NULL) {
                 send_message->status = OBJECT_NOT_FOUND;
                 return NULL;
@@ -698,7 +865,12 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         query_command += 17;
         dbo = parse_insert(query_command, send_message);
 
-    }else if (strncmp(query_command, "select", 6) == 0){
+    }else if (strncmp(query_command, "load", 4) == 0) {
+        query_command += 4;
+        dbo = parse_load(query_command, send_message);
+
+    }
+    else if (strncmp(query_command, "select", 6) == 0){
         query_command += 6;
         dbo = parse_select(query_command, handle, context, send_message);
 

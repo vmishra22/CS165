@@ -4,6 +4,8 @@
 #include "utils.h"
 
 
+
+
 Table* lookup_table(char *name) {
 	size_t i;
 	for(i=0; i<(current_db->tables_size); i++){
@@ -15,29 +17,31 @@ Table* lookup_table(char *name) {
 	return NULL;
 }
 
-Column* retrieve_column_for_scan(Table* table, char* colname){
+Column* retrieve_column_for_scan(Table* table, char* colname, bool loadData){
 	size_t i;
 	size_t numColumns = table->col_count;
 	for(i=0; i<numColumns; i++){
 		if(strcmp(table->columns[i].name, colname) == 0){
 			Column* scanColumn = &(table->columns[i]);
-			char colPath[256];
-			strcpy(colPath, "../data/");
-			strcat(colPath, current_db->name);
-			strcat(colPath, "/");
-			strcat(colPath, table->name);
-			strcat(colPath, "/");
-			strcat(colPath, colname);
+			if(loadData){
+				char colPath[256];
+				strcpy(colPath, "../data/");
+				strcat(colPath, current_db->name);
+				strcat(colPath, "/");
+				strcat(colPath, table->name);
+				strcat(colPath, "/");
+				strcat(colPath, colname);
 
-			FILE *ptr_column;
-			ptr_column=fopen(colPath, "rb");
-			if(!ptr_column){
-				return NULL;
+				FILE *ptr_column;
+				ptr_column=fopen(colPath, "rb");
+				if(!ptr_column){
+					return NULL;
+				}
+				scanColumn->data = (int*)malloc(sizeof(int)*(table->table_length));
+				size_t read_val = fread(scanColumn->data, sizeof(int), table->table_length, ptr_column);
+				(void)read_val;
+				fclose(ptr_column);
 			}
-			scanColumn->data = (int*)malloc(sizeof(int)*(table->table_length));
-			size_t read_val = fread(scanColumn->data, sizeof(int), table->table_length, ptr_column);
-			(void)read_val;
-			fclose(ptr_column);
 			return scanColumn;
 		}
 	}
@@ -275,6 +279,128 @@ GeneralizedColumnHandle* check_for_existing_handle(ClientContext* context, char*
 	}
 	return NULL;
 }
+
+//Filling the index data for the clustered column
+static void fillDataIndex(Column* column, size_t columnSize){
+	size_t i;
+	ColumnIndex* pIndex = column->index;
+	int* baseData = column->data;
+	//copy base data into index data
+	if(columnSize >= pIndex->index_data_capacity){
+		pIndex->index_data_capacity = columnSize + 1;
+		pIndex->tuples = (dataRecord*)realloc(pIndex->tuples, (pIndex->index_data_capacity) * sizeof(dataRecord));
+	}
+
+	for(i=0; i<columnSize; i++){
+		dataRecord* colTuple = &(pIndex->tuples[i]);
+		colTuple->pos = i;
+		colTuple->val = baseData[i];
+		(pIndex->index_size)++;
+	}
+}
+
+static int cmprecordp(const void *p1, const void *p2){
+	const dataRecord *ia = (dataRecord *)p1;
+	const dataRecord *ib = (dataRecord *)p2;
+
+	return (ia->val - ib->val);
+}
+
+void createSortColumnIndex(Table* table, Column* column){
+	size_t columnSize = table->table_length;
+	ColumnIndex* pIndex = column->index;
+
+	fillDataIndex(column, columnSize);
+
+	dataRecord* colTuplesArr = pIndex->tuples;
+	qsort(colTuplesArr, columnSize, sizeof(dataRecord), cmprecordp);
+}
+
+void createTreeColumnIndex(Table* table, Column* column){
+	size_t i;
+	size_t columnSize = table->table_length;
+	ColumnIndex* pIndex = column->index;
+	int* baseData = column->data;
+	node* root = NULL;
+	for(i=0; i<columnSize; i++){
+		root = insert_in_tree(root, baseData[i], i);
+	}
+	pIndex->dataIndex = root;
+	if(columnSize >= pIndex->index_data_capacity){
+		pIndex->index_data_capacity = columnSize + 1;
+		pIndex->tuples = (dataRecord*)realloc(pIndex->tuples, (pIndex->index_data_capacity) * sizeof(dataRecord));
+	}
+	getTreeDataRecords(root, &(pIndex->tuples));
+}
+
+void form_column_index(Table* table){
+	size_t i=0, j=0, k = 0, col_Idx = 0;
+	size_t numColumns = table->col_count;
+	size_t columnSize = table->table_length;
+	size_t colNumFirstClust = -1;
+
+	for(col_Idx = 0; col_Idx<numColumns; col_Idx++){
+		Column* column = &(table->columns[col_Idx]);
+		ColumnIndex* pIndex = column->index;
+	    if(pIndex != NULL && pIndex->clustered){
+			if(strcmp(table->firstDeclaredClustCol, column->name) == 0){
+				colNumFirstClust = i;
+			}
+			if(pIndex->indexType == SORTED){
+				createSortColumnIndex(table, column);
+			}
+			else if(pIndex->indexType == BTREE){
+				createTreeColumnIndex(table, column);
+			}
+
+		    for(i=0; i<numColumns; i++){
+		        Column* otherColumn = &(table->columns[i]);
+		        ColumnIndex* pOtherColumnIndex = otherColumn->index;
+		        if(pOtherColumnIndex == NULL){
+		        	otherColumn->index = (ColumnIndex*)malloc(sizeof(ColumnIndex));
+		            memset(otherColumn->index, 0, sizeof(ColumnIndex));
+		            pOtherColumnIndex = otherColumn->index;
+		            pOtherColumnIndex->index_data_capacity = 200;
+		            pOtherColumnIndex->index_size = 0;
+		            pOtherColumnIndex->tuples = (dataRecord*)
+		            							malloc(sizeof(dataRecord) * (pOtherColumnIndex->index_data_capacity));
+		            memset(pOtherColumnIndex->tuples, 0, sizeof(dataRecord)*(pOtherColumnIndex->index_data_capacity));
+		        }else{
+		        	if(!(pOtherColumnIndex->clustered)){
+		        		if(columnSize >= pOtherColumnIndex->index_data_capacity){
+							pOtherColumnIndex->index_data_capacity = columnSize + 1;
+		            		pOtherColumnIndex->tuples=(dataRecord*)
+		            			realloc(pOtherColumnIndex->tuples,(pOtherColumnIndex->index_data_capacity)*sizeof(dataRecord));
+		            	}
+		        	}
+		        }
+		    }
+
+		    //Propagate the order
+		 	char* leadingColName = table->firstDeclaredClustCol;
+		    if(strlen(leadingColName) > 0){
+		    	Column* leadingCol = &(table->columns[colNumFirstClust]);
+		    	ColumnIndex* leadingColIndex = leadingCol->index;
+		    	for(k=0; k<columnSize; k++){
+					dataRecord* lColTuple = &(leadingColIndex->tuples[k]);
+					size_t basePos = lColTuple->pos;
+					for(j=0; j<numColumns; j++){
+						if(j == colNumFirstClust)
+							continue;
+						Column* tCol = &(table->columns[j]);
+						int* baseData = tCol->data;
+						ColumnIndex* tIndex = tCol->index;
+						dataRecord* tColTuple = &(tIndex->tuples[k]);
+						tColTuple->pos = basePos;
+						tColTuple->val = baseData[basePos];
+						(tIndex->index_size)++;
+					}
+				}
+		    }
+		}
+	}
+}
+
 /** execute_DbOperator takes as input the DbOperator and executes the query.
  **/
 void execute_DbOperator(DbOperator* query, char** msg) {
@@ -292,14 +418,23 @@ void execute_DbOperator(DbOperator* query, char** msg) {
     Table* table = NULL;
     Column* column = NULL;
     switch(query->type){
+    	case CREATE_IDX:
+    	{
+    		table = query->operator_fields.create_idx_operator.table;
+    		
+    		form_column_index(table);
+
+    		break;
+    	}
         case INSERT: 
+        {
             table = query->operator_fields.insert_operator.table;
             size_t numColumns = table->col_count;
 
             size_t columnSize = table->table_length;
             //check if the column data size need to be modified.
             if(columnSize == table->col_data_capacity){
-            	table->col_data_capacity *= 2; 
+            	table->col_data_capacity *= 5; 
             	for(i=0; i<numColumns; i++){
             		column = &(table->columns[i]);
             		column->data = (int*)realloc(column->data, (table->col_data_capacity) * sizeof(int));
@@ -312,6 +447,9 @@ void execute_DbOperator(DbOperator* query, char** msg) {
                 column->data[columnSize] = query->operator_fields.insert_operator.values[i];
             }
             (table->table_length)++;
+
+            //form_column_index(table);
+
             char insertMsg[] = "Insert Operation Succeeded";
             char str[128];
             memset(str, '\0', 128);
@@ -323,6 +461,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         		free(query->operator_fields.insert_operator.values);
            
             break;
+        }
         case CREATE:
             break;
         case OPEN:
@@ -385,7 +524,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         }
 
         case FETCH:
-
+		{
         	column = query->operator_fields.fetch_operator.column;
         	char* handle = query->operator_fields.fetch_operator.handle;
         	char* targetHandle = query->operator_fields.fetch_operator.targetVecHandle;
@@ -442,6 +581,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         		}
         	}
             break;
+        }
         case PRINT:
     	{
         	handleNames = query->operator_fields.print_operator.handleNames;

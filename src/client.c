@@ -58,6 +58,14 @@ int connect_client() {
     return client_socket;
 }
 
+char* next_token(char** tokenizer, message_status* status) {
+    char* token = strsep(tokenizer, ",");
+    if (token == NULL) {
+        *status= INCORRECT_FORMAT;
+    }
+    return token;
+}
+
 void parse_load_query(char* loadQuery, int client_socket){
     char *temp, *tempToFree;
     tempToFree = temp = (char*)strdup(loadQuery);
@@ -80,80 +88,127 @@ void parse_load_query(char* loadQuery, int client_socket){
             memset(buf, '\0', 1024);
             memset(table_Name, '\0', 256);
             memset(query_insert, '\0', 1024);
+
+            //Read all the column names from the first line
+            char** col_names = (char**)malloc(sizeof(char*) * 10);
+            int nCols=0, i=0; //Number of Columns
             if(fgets(buf, 1024, fd))
             {
+                char* token = NULL;
                 char* tmp, *tmpToFree;
                 tmp = tmpToFree = strdup(buf);
-                char* tkdb = strsep(&tmp, ".");
-                char* tktable = strsep(&tmp, ".");
-                strcat(table_Name, tkdb);
-                strcat(table_Name, ".");
-                strcat(table_Name, tktable);
-                strcat(query_insert, "relational_insert(");
-                strcat(query_insert, table_Name);
-                strcat(query_insert, ",");
+                while ((token = strsep(&tmp, ",")) != NULL) {
+                    col_names[nCols] = (char*)malloc(sizeof(char) * (strlen(token) + 1));
+                    strcpy(col_names[nCols], token);
+                    nCols++;
+                }
+                int last_char = strlen(col_names[nCols-1]) - 1;
+                col_names[nCols-1][last_char] = '\0';
                 free(tmpToFree);
             }
-            memset(buf, '\0', 1024);
-            char newQueryInsert[1024];
-            while (fgets(buf, 512, fd))
-            {
-                char *tempStr1, *tempStr1ToFree;
-                tempStr1 = tempStr1ToFree = strdup(buf);
-                char* tmptk = strsep(&tempStr1, "\n");
 
-                memset(newQueryInsert, '\0', 1024);
-                strcat(newQueryInsert, query_insert);
-                strcat(newQueryInsert, tmptk);
-                strcat(newQueryInsert, ")\n");
-                free(tempStr1ToFree);
-
-                char payload[DEFAULT_STDIN_BUFFER_SIZE];
-                strcpy(payload, newQueryInsert);
-                load_send_message.length = strlen(payload);
-
-                //cs165_log(stdout, payload);
-
-                if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
-                    log_err("Failed to send message header.");
-                    exit(1);
-                }
-
-                // Send the payload (query) to server
-                if (send(client_socket, payload, load_send_message.length, 0) == -1) {
-                    log_err("Failed to send query payload.");
-                    exit(1);
-                }
-
-                //sleep(2);
-                
-                // Always wait for server response (even if it is just an OK message)
-                if ((len = recv(client_socket, &(load_recv_message), sizeof(message), 0)) > 0) {
-                    if (load_recv_message.status == OK_WAIT_FOR_RESPONSE &&
-                        (int) load_recv_message.length > 0) {
-                        // Calculate number of bytes in response package
-                        int num_bytes = (int) load_recv_message.length;
-                        char payloadRecv[num_bytes + 1];
-
-                        // Receive the payload and print it out
-                        if ((len = recv(client_socket, payloadRecv, num_bytes, 0)) > 0) {
-                            payloadRecv[num_bytes] = '\0';
-                            printf("%s\n", payloadRecv);
-                        }
+            size_t col_val_capacity = 1024;
+            char** col_values = (char**)malloc(sizeof(char*) * nCols);
+            for(i=0; i<nCols; i++){
+                col_values[i] = (char*)malloc(sizeof(char) * col_val_capacity);
+                memset(col_values[i], '\0', col_val_capacity);
+                strcpy(col_values[i], "load(");
+                strcat(col_values[i], col_names[i]);
+                strcat(col_values[i], ",");
+            }
+            
+            while (fgets(buf, 1024, fd)){
+                int j=0;
+                char* token = NULL;
+                char* tmp, *tmpToFree;
+                tmp = tmpToFree = strdup(buf);
+                trim_newline(tmp);
+                if(strlen(col_values[0]) >= col_val_capacity * 0.8 ){
+                    col_val_capacity *= 100; 
+                    for(i=0; i<nCols; i++){
+                        col_values[i] = (char*)realloc(col_values[i], col_val_capacity * sizeof(char));
                     }
+                }
+                while ((token = strsep(&tmp, ",")) != NULL && strlen(token) > 0) {
+                    strcat(col_values[j], token);
+                    strcat(col_values[j], ",");
+                    j++;
+                }
+            }
+            size_t payload_length = 0;
+            for(i=0; i<nCols; i++){
+                size_t len = strlen(col_values[i]);
+                int last_char = len - 1;
+                col_values[i][last_char] = '\0';
+                payload_length += len;
+            }
+            for(i=0; i<nCols; i++){
+                if(i == nCols-1)
+                    strcat(col_values[i], ")\n");
+                else
+                    strcat(col_values[i], "),");
+            }
+
+            //Form the queries
+
+            char *payload = NULL;
+            payload_length += (nCols*5);
+            payload = (char*) malloc(sizeof(char)* (payload_length));
+            memset(payload, '\0', (payload_length));
+
+            for(i=0; i<nCols; i++){
+                strcat(payload, col_values[i]);
+            }
+            load_send_message.length = payload_length;
+
+            //cs165_log(stdout, payload);
+
+            if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
+                log_err("Failed to send message header.");
+                exit(1);
+            }
+
+            // Send the payload (query) to server
+            if (send(client_socket, payload, load_send_message.length, 0) == -1) {
+                log_err("Failed to send query payload.");
+                exit(1);
+            }
+            
+            // Always wait for server response (even if it is just an OK message)
+            if ((len = recv(client_socket, &(load_recv_message), sizeof(message), 0)) > 0) {
+                if (load_recv_message.status == OK_WAIT_FOR_RESPONSE &&
+                    (int) load_recv_message.length > 0) {
+                    // Calculate number of bytes in response package
+                    int num_bytes = (int) load_recv_message.length;
+                    char payloadRecv[num_bytes + 1];
+
+                    // Receive the payload and print it out
+                    if ((len = recv(client_socket, payloadRecv, num_bytes, 0)) > 0) {
+                        payloadRecv[num_bytes] = '\0';
+                        printf("%s\n", payloadRecv);
+                    }
+                }
+            }
+            else {
+                if(payload != NULL)
+                    free(payload);
+                if (len < 0) {
+                    log_err("Failed to receive message.");
                 }
                 else {
-                    if (len < 0) {
-                        log_err("Failed to receive message.");
-                    }
-                    else {
-                        log_info("Server closed connection\n");
-                    }
-                    exit(1);
+                    log_info("Server closed connection\n");
                 }
-
-                
+                exit(1);
             }
+
+            if(payload != NULL)
+                free(payload);
+            
+
+            for(i=0; i<nCols; i++){
+                free(col_names[i]); free(col_values[i]);
+            }
+            free(col_names); free(col_values);
             fclose(fd);
         }
         else{
@@ -207,6 +262,7 @@ int main(void)
 
             if(strncmp(send_message.payload, "load", 4) == 0){
                 parse_load_query(send_message.payload, client_socket);
+
             }
             else{
                 // Send the message_header, which tells server payload size

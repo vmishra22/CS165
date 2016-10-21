@@ -28,17 +28,9 @@ SOFTWARE.
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include "common.h"
 
-// Limits the size of a name in our database to 64 characters
-#define MAX_SIZE_NAME 64
-#define HANDLE_MAX_SIZE 64
 
-//Maximum number of tables in a database
-#define MAX_TABLE_SIZE 8
-//Maximum number of columns in a table
-#define MAX_COLUMN_SIZE 16
-
-#define MAX_PRINT_HANDLE 8
 /**
  * EXTRA
  * DataType
@@ -55,18 +47,35 @@ typedef enum DataType {
      DOUBLE
 } DataType;
 
+typedef enum IndexType{
+    SORTED,
+    BTREE
+}IndexType;
+
 struct Comparator;
-//struct ColumnIndex;
+
+typedef struct dataRecord{
+    int pos;
+    int val;
+}dataRecord;
+
+typedef struct ColumnIndex
+{
+    IndexType indexType;
+    void* dataIndex;
+    int* positionsIndex;
+    bool clustered;
+    bool unclustered;
+    size_t index_size;
+    size_t index_data_capacity;
+    dataRecord* tuples;
+}ColumnIndex;
 
 typedef struct Column {
     char name[MAX_SIZE_NAME]; 
-    int* data;
-    // You will implement column indexes later. 
-    void* index;
-    //struct ColumnIndex *index;
-    //bool clustered;
+    int* data;    
+    ColumnIndex *index;
 } Column;
-
 
 /**
  * table
@@ -88,6 +97,7 @@ typedef struct Table {
     size_t col_count;
     size_t table_length;
     size_t col_data_capacity;
+    char firstDeclaredClustCol[MAX_SIZE_NAME];
 } Table;
 
 /**
@@ -201,6 +211,7 @@ typedef struct Comparator {
  */
 typedef enum OperatorType {
     CREATE,
+    CREATE_IDX,
     INSERT,
     OPEN,
     SELECT, 
@@ -217,6 +228,11 @@ typedef struct InsertOperator {
     Table* table;
     int* values;
 } InsertOperator;
+
+typedef struct CreateIdxOperator {
+    Table* table;
+    Column* column;
+} CreateIdxOperator;
 /*
  * necessary fields for Open
  */
@@ -278,6 +294,7 @@ typedef struct MaxMinOperator {
  */
 typedef union OperatorFields {
     InsertOperator insert_operator;
+    CreateIdxOperator create_idx_operator;
     OpenOperator open_operator;
     SelectOperator select_operator;
     FetchOperator fetch_operator;

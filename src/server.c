@@ -124,7 +124,10 @@ void handle_client(int client_socket) {
             // 2. Handle request
             char* payload_to_client = (char*)malloc(MAX_RESPONSE_SIZE);
             memset(payload_to_client, '\0', MAX_RESPONSE_SIZE);
+
+            //Execute db operator
             execute_DbOperator(query, &payload_to_client);
+
             char retMessage[MAX_RESPONSE_SIZE];
             strcpy(retMessage, payload_to_client);
             free(payload_to_client);

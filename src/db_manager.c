@@ -21,6 +21,7 @@ Column* create_column(char *name, Table *table, bool sorted, Status *ret_status)
 			strcpy(table->columns[i].name, name);
 			column = &(table->columns[i]);
 			column->data = (int*)malloc(sizeof(int) * (table->col_data_capacity));
+			column->index = NULL;
 			break;
 		}
 	}
@@ -47,6 +48,7 @@ Table* create_table(Db* db, const char* name, size_t num_columns, Status *ret_st
 	table->col_count = num_columns;
 	table->col_data_capacity = 200;
 	table->table_length = 0;
+	strcpy(table->firstDeclaredClustCol, "");
 	
 	ret_status->code=OK;
 
@@ -256,6 +258,10 @@ Status shutdown_server(){
 			int* colData = (current_db->tables[i]).columns[j].data;
 			if(colData != NULL)
 				free(colData);
+			ColumnIndex* index = (current_db->tables[i]).columns[j].index;
+			if(index != NULL){
+				free(index);
+			}
 		}
 		free(cols);
 	}
