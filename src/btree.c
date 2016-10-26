@@ -193,7 +193,14 @@ node* read_tree_from_file(FILE* fp){
 		free(tempKeys);
 
 		if (treeNode->is_leaf) {
-			readVal = fread( treeNode->pointers, sizeof(void*), (treeNode->num_keys), fp );
+			for (i = 0; i < treeNode->num_keys; i++){
+				int pos, val;
+				readVal = fread( &pos, sizeof(int), 1, fp );
+				readVal = fread( &val, sizeof(int), 1, fp );
+				record* pRec = make_record(val, pos);
+				treeNode->pointers[i] = pRec;
+			}
+			//readVal = fread( treeNode->pointers, sizeof(void*), (treeNode->num_keys), fp );
 			// for (i = 0; i < treeNode->num_keys; i++){
 			// 	record* pRec = (record*)(treeNode->pointers[i]);
 			// 	readVal = fread( pRec, sizeof(record), 1, fp );
@@ -202,7 +209,7 @@ node* read_tree_from_file(FILE* fp){
 		else
 			readVal = fread( treeNode->pointers, sizeof(void*), (treeNode->num_keys)+1, fp );
 
-		readVal = fread( &(treeNode->parent), sizeof(node*), 1, fp );
+		//readVal = fread( &(treeNode->parent), sizeof(node*), 1, fp );
 
 		if (!treeNode->is_leaf)
 			for (i = 0; i <= treeNode->num_keys; i++)
@@ -231,16 +238,19 @@ void write_tree_to_file(node* root, FILE* fp) {
 
 		fwrite( treeNode->keys, sizeof(int), treeNode->num_keys, fp );
 		if (treeNode->is_leaf) {
-			fwrite( treeNode->pointers, sizeof(void*), (treeNode->num_keys), fp );
-			// for (i = 0; i < treeNode->num_keys; i++){
-			// 	record* pRec = (record*)(treeNode->pointers[i]);
-			// 	fwrite( pRec, sizeof(record), 1, fp );
-			// }
+			//fwrite( treeNode->pointers, sizeof(void*), (treeNode->num_keys), fp );
+			for (i = 0; i < treeNode->num_keys; i++){
+				record* pRec = (record*)(treeNode->pointers[i]);
+				int pos = pRec->pos;
+				int val = pRec->value;
+				fwrite( &pos, sizeof(int), 1, fp );
+				fwrite( &val, sizeof(int), 1, fp );
+			}
 		}
 		else
 			fwrite( treeNode->pointers, sizeof(void*), (treeNode->num_keys)+1, fp );
 
-		fwrite( &(treeNode->parent), sizeof(node*), 1, fp );
+		//fwrite( &(treeNode->parent), sizeof(node*), 1, fp );
 
 		if (!treeNode->is_leaf)
 			for (i = 0; i <= treeNode->num_keys; i++)
@@ -315,7 +325,7 @@ int find_lower_index_clustered(node* root, long int lowVal){
 	int i;
 	node * n = find_leaf( root, lowVal, true );
 	if (n == NULL) return 0;
-	for (i = 0; i < n->num_keys && n->keys[i] <= lowVal; i++) ;
+	for (i = 0; i < n->num_keys && n->keys[i] < lowVal; i++) ;
 	if (i == n->num_keys) return 0;
 	return i;
 }
@@ -332,9 +342,9 @@ int find_higher_index_clustered(node* root, long int highVal){
 int find_result_indices_scan_unclustered_select(node * root, int key_start, int key_end, int* resultIndices){
 	int i, num_found;
 	num_found = 0;
-	node* n = find_leaf( root, key_start, true);
+	node* n = find_leaf( root, key_start, false);
 	if (n == NULL) return 0;
-	for (i = 0; i < n->num_keys && n->keys[i] <= key_start; i++) ;
+	for (i = 0; i < n->num_keys && n->keys[i] < key_start; i++) ;
 	if (i == n->num_keys) return 0;
 	while (n != NULL) {
 		for ( ; i < n->num_keys && n->keys[i] < key_end; i++) {
