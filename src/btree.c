@@ -1,5 +1,5 @@
 #include "btree.h"
-
+#include <string.h>
 
 int order = 4000;
 node * queue = NULL;
@@ -48,7 +48,7 @@ void getTreeDataRecords(node* root, dataRecord** oRecords){
 	while (true) {
 		for (i = 0; i < treeNode->num_keys; i++) {
 			record* pRec = treeNode->pointers[i];
-			dataRecord* pDataRecord = &((*oRecords)[index]);
+			dataRecord* pDataRecord = &((*oRecords)[index++]);
 			pDataRecord->pos = pRec->pos;
 			pDataRecord->val = pRec->value;
 		}
@@ -173,6 +173,81 @@ void print_tree( node * root ) {
 	printf("\n");
 }
 
+node* read_tree_from_file(FILE* fp){
+	int i = 0;
+	node *root = NULL;
+	node *treeNode = NULL;
+	root = make_node();
+	queue = NULL;
+	enqueue(root);
+
+	while( queue != NULL ) {
+		treeNode = dequeue();
+		//size_t readVal = fread(treeNode, sizeof(node), 1, fp);
+		
+		size_t readVal = fread( &(treeNode->num_keys), sizeof(int), 1, fp );(void)readVal;
+		readVal = fread( &(treeNode->is_leaf), sizeof(bool), 1, fp );
+		int* tempKeys = (int*)malloc(sizeof(int)*treeNode->num_keys);
+		readVal = fread( tempKeys, sizeof(int), treeNode->num_keys, fp );
+		memcpy(treeNode->keys, tempKeys, sizeof(int)*(treeNode->num_keys));
+		free(tempKeys);
+
+		if (treeNode->is_leaf) {
+			readVal = fread( treeNode->pointers, sizeof(void*), (treeNode->num_keys), fp );
+			// for (i = 0; i < treeNode->num_keys; i++){
+			// 	record* pRec = (record*)(treeNode->pointers[i]);
+			// 	readVal = fread( pRec, sizeof(record), 1, fp );
+			// }
+		}
+		else
+			readVal = fread( treeNode->pointers, sizeof(void*), (treeNode->num_keys)+1, fp );
+
+		readVal = fread( &(treeNode->parent), sizeof(node*), 1, fp );
+
+		if (!treeNode->is_leaf)
+			for (i = 0; i <= treeNode->num_keys; i++)
+				enqueue(treeNode->pointers[i]);
+	}
+
+	return root;
+}
+
+void write_tree_to_file(node* root, FILE* fp) {
+	node *treeNode = NULL;
+	int i = 0;
+
+	if (root == NULL) {
+		printf("Empty tree.\n");
+		return;
+	}
+	queue = NULL;
+	enqueue(root);
+	while( queue != NULL ) {
+		treeNode = dequeue();
+		
+		//fwrite( treeNode, sizeof(node), 1, fp );
+		fwrite( &(treeNode->num_keys), sizeof(int), 1, fp );
+		fwrite( &(treeNode->is_leaf), sizeof(bool), 1, fp );
+
+		fwrite( treeNode->keys, sizeof(int), treeNode->num_keys, fp );
+		if (treeNode->is_leaf) {
+			fwrite( treeNode->pointers, sizeof(void*), (treeNode->num_keys), fp );
+			// for (i = 0; i < treeNode->num_keys; i++){
+			// 	record* pRec = (record*)(treeNode->pointers[i]);
+			// 	fwrite( pRec, sizeof(record), 1, fp );
+			// }
+		}
+		else
+			fwrite( treeNode->pointers, sizeof(void*), (treeNode->num_keys)+1, fp );
+
+		fwrite( &(treeNode->parent), sizeof(node*), 1, fp );
+
+		if (!treeNode->is_leaf)
+			for (i = 0; i <= treeNode->num_keys; i++)
+				enqueue(treeNode->pointers[i]);
+	}
+}
+
 
 /* Finds the record under a given key and prints an
  * appropriate message to stdout.
@@ -236,6 +311,42 @@ int find_range( node * root, int key_start, int key_end, bool verbose,
 	return num_found;
 }
 
+int find_lower_index_clustered(node* root, long int lowVal){
+	int i;
+	node * n = find_leaf( root, lowVal, true );
+	if (n == NULL) return 0;
+	for (i = 0; i < n->num_keys && n->keys[i] <= lowVal; i++) ;
+	if (i == n->num_keys) return 0;
+	return i;
+}
+
+int find_higher_index_clustered(node* root, long int highVal){
+	int i;
+	node * n = find_leaf( root, highVal, true );
+	if (n == NULL) return 0;
+	for (i = 0; i < n->num_keys && n->keys[i] < highVal; i++) ;
+	if (i == n->num_keys) return 0;
+	return i;
+}
+
+int find_result_indices_scan_unclustered_select(node * root, int key_start, int key_end, int* resultIndices){
+	int i, num_found;
+	num_found = 0;
+	node* n = find_leaf( root, key_start, true);
+	if (n == NULL) return 0;
+	for (i = 0; i < n->num_keys && n->keys[i] <= key_start; i++) ;
+	if (i == n->num_keys) return 0;
+	while (n != NULL) {
+		for ( ; i < n->num_keys && n->keys[i] < key_end; i++) {
+			record* keyRecord = (record*)(n->pointers[i]);
+			int pos = keyRecord->pos;
+			resultIndices[num_found++] = pos;
+		}
+		n = n->pointers[order - 1];
+		i = 0;
+	}
+	return num_found;
+}
 
 /* Traces the path from the root to a leaf, searching
  * by key.  Displays information about the path
@@ -307,8 +418,8 @@ int cut( int length ) {
 /* Creates a new record to hold the value
  * to which a key refers.
  */
-record * make_record(int value, int pos) {
-	record * new_record = (record *)malloc(sizeof(record));
+record* make_record(int value, int pos) {
+	record* new_record = (record*)malloc(sizeof(record));
 	if (new_record == NULL) {
 		perror("Record creation.");
 		exit(EXIT_FAILURE);

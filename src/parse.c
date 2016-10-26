@@ -81,9 +81,10 @@ message_status parse_create_idx(char* create_arguments) {
 
                 //Initialize the tuples
                 pIndex->index_data_capacity = 200;
-                pIndex->index_size = 0;
                 pIndex->tuples = (dataRecord*)malloc(sizeof(dataRecord) * (pIndex->index_data_capacity));
                 memset(pIndex->tuples, 0, sizeof(dataRecord)*(pIndex->index_data_capacity));
+
+                status = OK_WAIT_FOR_RESPONSE;
             }
             else
                 status = OBJECT_NOT_FOUND;

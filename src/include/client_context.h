@@ -9,4 +9,8 @@ Table* lookup_table(char *name);
 
 Column* retrieve_column_for_scan(Table* table, char* col_name, bool loadData);
 
+void createSortColumnUnClusteredIndex(Table* table, Column* column);
+
+void createTreeColumnUnClusteredIndex(Table* table, Column* column);
+
 #endif

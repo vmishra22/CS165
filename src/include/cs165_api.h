@@ -48,6 +48,7 @@ typedef enum DataType {
 } DataType;
 
 typedef enum IndexType{
+    NONE,
     SORTED,
     BTREE
 }IndexType;
@@ -63,10 +64,8 @@ typedef struct ColumnIndex
 {
     IndexType indexType;
     void* dataIndex;
-    int* positionsIndex;
     bool clustered;
     bool unclustered;
-    size_t index_size;
     size_t index_data_capacity;
     dataRecord* tuples;
 }ColumnIndex;
@@ -150,6 +149,8 @@ typedef struct Result {
     size_t num_tuples;
     DataType data_type;
     void *payload;
+    int lower_idx;
+    int upper_idx;
 } Result;
 
 /*
@@ -317,8 +318,6 @@ typedef struct DbOperator {
     ClientContext* context;
 } DbOperator;
 
-
-
 typedef struct Catalog
 {
     char dbName[MAX_SIZE_NAME];
@@ -329,8 +328,10 @@ typedef struct Catalog
     size_t columnSize[MAX_TABLE_SIZE];
     size_t columnDataCapacity[MAX_TABLE_SIZE];
     char columnNames[MAX_TABLE_SIZE][MAX_COLUMN_SIZE][MAX_SIZE_NAME];
+    char firstDeclaredClustCol[MAX_TABLE_SIZE] [MAX_SIZE_NAME];
+    char columnIndexType[MAX_TABLE_SIZE][MAX_COLUMN_SIZE][MAX_SIZE_NAME];
+    char columnIndexClustType[MAX_TABLE_SIZE][MAX_COLUMN_SIZE][MAX_SIZE_NAME];
 }Catalog;
-
 
 extern Db *current_db;
  

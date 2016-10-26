@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <stdbool.h>
+#include "btree.h"
 
 // In this class, there will always be only one active database at a time
 Db *current_db;
@@ -166,10 +167,75 @@ Status db_startup(){
 		table->table_length = catalog.columnSize[i];
 		table->col_data_capacity = catalog.columnDataCapacity[i];
 		table->columns = (Column*)malloc(sizeof(Column)*numTabColumns);
+        strcpy(table->firstDeclaredClustCol, catalog.firstDeclaredClustCol[i]);
 		for(j=0; j<numTabColumns; j++){
 			Column* column = &(table->columns[j]);
 			strcpy(column->name, catalog.columnNames[i][j]);
 			column->data = NULL;
+		}
+
+		//Check if any column has index
+		bool isIndexExisting = false;
+		for(j=0; j<numTabColumns; j++){
+			if( strcmp(catalog.columnIndexClustType[i][j], "clustered") == 0 ||
+				strcmp(catalog.columnIndexClustType[i][j], "unclustered") == 0){
+				isIndexExisting = true;
+				break;
+			}
+		}
+		if(isIndexExisting){
+			for(j=0; j<numTabColumns; j++){
+				Column* column = &(table->columns[j]);
+				char* colName = column->name;
+				column->index = (ColumnIndex*)malloc(sizeof(ColumnIndex));
+	            memset(column->index, 0, sizeof(ColumnIndex));
+	            ColumnIndex* pIndex = column->index;
+	            pIndex->index_data_capacity = table->table_length;
+	            pIndex->tuples = (dataRecord*)malloc(sizeof(dataRecord)*(pIndex->index_data_capacity));
+	            memset(pIndex->tuples, 0, sizeof(dataRecord)*(pIndex->index_data_capacity));
+	            if( strcmp(catalog.columnIndexClustType[i][j], "clustered") == 0)
+	            	pIndex->clustered = true;
+	            else if(strcmp(catalog.columnIndexClustType[i][j], "unclustered") == 0)
+	            	pIndex->unclustered = true;
+	            else{
+	            	pIndex->clustered = false; pIndex->unclustered = false;
+	            }
+
+	            FILE *ptr_index;
+				char indexName[64];
+				strcpy(indexName, colName);
+				strcat(indexName, "Index");
+				char indexPath[256];
+				strcpy(indexPath, "../data/");
+				strcat(indexPath, current_db->name);
+				strcat(indexPath, "/");
+				strcat(indexPath, table->name);
+				strcat(indexPath, "/");
+				strcat(indexPath, indexName);
+				ptr_index=fopen(indexPath, "rb");
+
+				if(!ptr_index){
+					ret_status.code =  ERROR;
+					return ret_status;
+				}
+
+	            if(strcmp(catalog.columnIndexType[i][j], "SORTED") == 0){
+	            	pIndex->indexType = SORTED;
+					size_t readVal = fread(pIndex->tuples, sizeof(dataRecord), table->table_length, ptr_index);
+					(void)readVal;
+	            }
+	            else if(strcmp(catalog.columnIndexType[i][j], "BTREE") == 0){
+	            	pIndex->indexType = BTREE;
+	            	node* root = NULL;
+	            	root = read_tree_from_file(ptr_index);
+	            	pIndex->dataIndex = root;
+	            }
+	            else{
+	            	size_t readVal = fread(pIndex->tuples, sizeof(dataRecord), table->table_length, ptr_index);
+	            	(void)readVal;
+	            }
+	            fclose(ptr_index);
+        	}
 		}
 	}
 	fclose(ptr_catalog);
@@ -205,6 +271,8 @@ Status saveDatabase(){
 		int tableLength = table->table_length;
 		catalog.columnSize[i] = tableLength;
 		catalog.columnDataCapacity[i] = table->col_data_capacity;
+		if(strcmp(table->firstDeclaredClustCol, "") != 0)
+            strcpy(catalog.firstDeclaredClustCol[i], table->firstDeclaredClustCol);
 
 		char tablePath[256];
 		strcpy(tablePath, "../data/");
@@ -235,6 +303,50 @@ Status saveDatabase(){
 
 			fwrite(column->data, sizeof(int), tableLength, ptr_column);
 			fclose(ptr_column);
+		}
+
+		for(j=0; j<numTableColumns; j++){
+			Column* column = &(table->columns[j]);
+			char* colName = column->name;
+			ColumnIndex* pIndex = column->index;
+			if(pIndex != NULL){
+				FILE *ptr_index;
+				char indexName[64];
+				strcpy(indexName, colName);
+				strcat(indexName, "Index");
+				char indexPath[256];
+				strcpy(indexPath, tablePath);
+				strcat(indexPath, indexName);
+				ptr_index=fopen(indexPath, "wb");
+
+				if(!ptr_index){
+					ret_status.code =  ERROR;
+					return ret_status;
+				}
+
+				if(pIndex->clustered)
+					strcpy(catalog.columnIndexClustType[i][j], "clustered");
+				else if(pIndex->unclustered)
+					strcpy(catalog.columnIndexClustType[i][j], "unclustered");
+				else
+					strcpy(catalog.columnIndexClustType[i][j], "");
+
+				if(pIndex->indexType == SORTED){
+					strcpy(catalog.columnIndexType[i][j], "SORTED");
+					dataRecord* colTuplesArr = pIndex->tuples;
+					fwrite(colTuplesArr, sizeof(dataRecord), tableLength, ptr_index);
+
+				}else if(pIndex->indexType == BTREE){
+					strcpy(catalog.columnIndexType[i][j], "BTREE");
+					write_tree_to_file(pIndex->dataIndex, ptr_index);
+				}
+				else{
+					strcpy(catalog.columnIndexType[i][j], "");
+					dataRecord* colTuplesArr = pIndex->tuples;
+					fwrite(colTuplesArr, sizeof(dataRecord), tableLength, ptr_index);
+				}
+				fclose(ptr_index);
+			}
 		}
 	}
 

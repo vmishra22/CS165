@@ -107,7 +107,7 @@ void parse_load_query(char* loadQuery, int client_socket){
                 free(tmpToFree);
             }
 
-            size_t col_val_capacity = 1024;
+            size_t col_val_capacity = 4*1024*1024;
             char** col_values = (char**)malloc(sizeof(char*) * nCols);
             for(i=0; i<nCols; i++){
                 col_values[i] = (char*)malloc(sizeof(char) * col_val_capacity);
@@ -124,7 +124,7 @@ void parse_load_query(char* loadQuery, int client_socket){
                 tmp = tmpToFree = strdup(buf);
                 trim_newline(tmp);
                 if(strlen(col_values[0]) >= col_val_capacity * 0.8 ){
-                    col_val_capacity *= 100; 
+                    col_val_capacity *= 10; 
                     for(i=0; i<nCols; i++){
                         col_values[i] = (char*)realloc(col_values[i], col_val_capacity * sizeof(char));
                     }
@@ -161,7 +161,7 @@ void parse_load_query(char* loadQuery, int client_socket){
             }
             load_send_message.length = payload_length;
 
-            //cs165_log(stdout, payload);
+            cs165_log(stdout, payload);
 
             if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
                 log_err("Failed to send message header.");

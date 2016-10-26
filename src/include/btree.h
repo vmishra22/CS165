@@ -77,5 +77,10 @@ node * delete_entry( node * root, node * n, int key, void * pointer );
 node * delete( node * root, int key );
 
 void getTreeDataRecords(node* root, dataRecord** oRecords);
+void write_tree_to_file(node* root, FILE* fp);
+node* read_tree_from_file(FILE* fp);
+int find_result_indices_scan_unclustered_select(node * root, int key_start, int key_end, int* resultIndices);
+int find_lower_index_clustered(node* root, long int lowVal);
+int find_higher_index_clustered(node* root, long int highVal);
 
 #endif

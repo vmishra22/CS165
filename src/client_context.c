@@ -49,32 +49,216 @@ Column* retrieve_column_for_scan(Table* table, char* colname, bool loadData){
 	return NULL;
 }
 
+int BinarySearchLessThan(Table* table, Column* column, Comparator* comparator){
+	size_t columnSize = table->table_length;
+	ColumnIndex* pIndex = column->index;
+	dataRecord* colTuplesArr = pIndex->tuples;
+
+	int tupleIndex = -1; 
+	if(comparator->type2 == LESS_THAN){
+		long int m = comparator->p_high;
+		
+		size_t l=0, u=columnSize-1, mid, k;
+		bool valueFound = false;
+	    while(l<=u){
+			mid=(l+u)/2;
+			dataRecord tuple = colTuplesArr[mid];
+			if(m==tuple.val){
+				for(k=mid-1; (int)k>=0; k--){
+					dataRecord ctuple = colTuplesArr[k];
+					if(ctuple.val < m){
+						tupleIndex = k;
+						valueFound = true;
+						break;
+					}
+				}
+				break;
+			}
+			else if(m<tuple.val){
+			 	u=mid-1;
+			}
+			else
+			 	l=mid+1;
+	    }
+	    if(valueFound){
+	    	return tupleIndex;
+	    }
+	    else{
+	    	if(u != columnSize-1) 
+	    		k = u+1;
+	    	else
+	    		k = u;
+    		for(;(int)k>=0;k--){
+				dataRecord ctuple = colTuplesArr[k];
+				if(ctuple.val < m){
+					tupleIndex = k;
+					break;
+				}
+			}
+			return tupleIndex;
+	    }
+    }
+    return tupleIndex;
+}
+
+int BinarySearchGreaterThanOrEqual(Table* table, Column* column, Comparator* comparator){
+	size_t columnSize = table->table_length;
+	ColumnIndex* pIndex = column->index;
+	dataRecord* colTuplesArr = pIndex->tuples;
+
+	int tupleIndex = -1; 
+	if(comparator->type1 == GREATER_THAN_OR_EQUAL){
+		long int m = comparator->p_low;
+		
+		size_t l=0, u=columnSize-1, mid, k;
+		bool valueFound = false;
+	    while(l<=u){
+			mid=(l+u)/2;
+			dataRecord tuple = colTuplesArr[mid];
+			if(m==tuple.val){
+				tupleIndex = mid;
+				valueFound = true;
+				break;
+			}
+			else if(m<tuple.val){
+			 	u=mid-1;
+			}
+			else
+			 	l=mid+1;
+	    }
+	    if(valueFound){
+	    	return tupleIndex;
+	    }
+	    else{
+	    	if(l != 0) 
+	    		k = l-1;
+	    	else
+	    		k = l;
+    		for(;k<columnSize;k++){
+				dataRecord ctuple = colTuplesArr[k];
+				if(ctuple.val >= m){
+					tupleIndex = k;
+					break;
+				}
+			}
+			return tupleIndex;
+	    }
+    }
+    return tupleIndex;
+}
+
 static Result* computeResultIndices(Table* table, Column* column, Comparator* comparator){
 	size_t i=0, j=0;
+	int k = 0;
 	size_t columnSize = table->table_length;
 	int *resultIndices = (int*)malloc(sizeof(int) * columnSize);
 	memset(resultIndices, 0, sizeof(int)*columnSize);
 	Result* pResult = (Result*)malloc(sizeof(Result));
 	memset(pResult, 0, sizeof(Result));
+	pResult->lower_idx = -1;
+	pResult->upper_idx = -1;
+	ColumnIndex* pIndex = column->index;
 	
 	if(comparator->type1 == NO_COMPARISON && comparator->type2 == NO_COMPARISON){
-		for (i=0; i<columnSize; i++){
-			resultIndices[j++]=i;
+		if(pIndex != NULL){
+			pResult->lower_idx = 0;
+			pResult->upper_idx = columnSize-1;
+		}else{
+			for (i=0; i<columnSize; i++){
+				resultIndices[j++]=i;
+			}
 		}
 	}else if(comparator->type1 == NO_COMPARISON && comparator->type2 == LESS_THAN){
-		for (i=0; i<columnSize; i++){
-			if(column->data[i] < comparator->p_high)
-				resultIndices[j++]=i;
+		if(pIndex != NULL){
+			if(pIndex->clustered){
+				if(pIndex->indexType == BTREE){
+
+				}else{
+					int retDataIndex = BinarySearchLessThan(table, column, comparator);
+					if(retDataIndex != -1){
+						pResult->lower_idx = 0;
+						pResult->upper_idx = retDataIndex;
+					}
+				}
+			}else if(pIndex->unclustered){
+				if(pIndex->indexType == BTREE){
+
+				}else{
+
+				}
+			}
+		}else{
+			for (i=0; i<columnSize; i++){
+				if(column->data[i] < comparator->p_high)
+					resultIndices[j++]=i;
+			}
 		}
 	}else if(comparator->type1 == GREATER_THAN_OR_EQUAL && comparator->type2 == NO_COMPARISON){
-		for (i=0; i<columnSize; i++){
-			if(column->data[i] >= comparator->p_low)
-				resultIndices[j++]=i;
+		if(pIndex != NULL){
+			if(pIndex->clustered){
+				if(pIndex->indexType == BTREE){
+
+				}else{
+					int retDataIndex = BinarySearchGreaterThanOrEqual(table, column, comparator);
+					if(retDataIndex != -1){
+						pResult->lower_idx = retDataIndex;
+						pResult->upper_idx = columnSize-1;
+					}
+				}
+			}else if(pIndex->unclustered){
+				if(pIndex->indexType == BTREE){
+
+				}else{
+					
+				}
+			}
+		}else{
+			for (i=0; i<columnSize; i++){
+				if(column->data[i] >= comparator->p_low)
+					resultIndices[j++]=i;
+			}
 		}
 	}else if(comparator->type1 == GREATER_THAN_OR_EQUAL && comparator->type2 == LESS_THAN){
-		for (i=0; i<columnSize; i++){
-			if(column->data[i] >= comparator->p_low && column->data[i] < comparator->p_high)
-				resultIndices[j++]=i;
+		if(pIndex != NULL){
+			if(pIndex->clustered){
+				if(pIndex->indexType == BTREE){
+					node* root = pIndex->dataIndex;
+					int retDataIndexLow = find_lower_index_clustered(root, comparator->p_low);
+					int retDataIndexHigh = find_higher_index_clustered(root, comparator->p_high);
+					if(retDataIndexLow != -1 && retDataIndexHigh != -1){
+						pResult->lower_idx = retDataIndexLow;
+						pResult->upper_idx = retDataIndexHigh;
+						j = (retDataIndexHigh - retDataIndexLow) + 1;
+					}
+				}else{
+					int retDataIndexLow = BinarySearchGreaterThanOrEqual(table, column, comparator);
+					int retDataIndexHigh = BinarySearchLessThan(table, column, comparator);
+					if(retDataIndexLow != -1 && retDataIndexHigh != -1){
+						pResult->lower_idx = retDataIndexLow;
+						pResult->upper_idx = retDataIndexHigh;
+						j = (retDataIndexHigh - retDataIndexLow) + 1;
+					}
+				}
+			}else if(pIndex->unclustered){
+				if(pIndex->indexType == BTREE){
+					node* root = pIndex->dataIndex;
+					j = find_result_indices_scan_unclustered_select(root, comparator->p_low, comparator->p_high, resultIndices);
+				}else{
+					int retDataIndexLow = BinarySearchGreaterThanOrEqual(table, column, comparator);
+					int retDataIndexHigh = BinarySearchLessThan(table, column, comparator);
+					if(retDataIndexLow != -1 && retDataIndexHigh != -1){
+						dataRecord* tuples = pIndex->tuples;
+						for (k=retDataIndexLow; k<=retDataIndexHigh; k++){
+							resultIndices[j++]=(tuples[k].pos);
+						}
+					}
+				}
+			}
+		}else{
+			for (i=0; i<columnSize; i++){
+				if(column->data[i] >= comparator->p_low && column->data[i] < comparator->p_high)
+					resultIndices[j++]=i;
+			}
 		}
 	}
 	
@@ -295,28 +479,41 @@ static void fillDataIndex(Column* column, size_t columnSize){
 		dataRecord* colTuple = &(pIndex->tuples[i]);
 		colTuple->pos = i;
 		colTuple->val = baseData[i];
-		(pIndex->index_size)++;
 	}
 }
 
-static int cmprecordp(const void *p1, const void *p2){
+static int cmppos(const void *p1, const void *p2){
+	const int *ia = (int *)p1;
+	const int *ib = (int *)p2;
+
+	return (*ia - *ib);
+}
+
+static int cmprecordval(const void *p1, const void *p2){
 	const dataRecord *ia = (dataRecord *)p1;
 	const dataRecord *ib = (dataRecord *)p2;
 
 	return (ia->val - ib->val);
 }
 
-void createSortColumnIndex(Table* table, Column* column){
+// static int cmprecordpos(const void *p1, const void *p2){
+// 	const dataRecord *ia = (dataRecord *)p1;
+// 	const dataRecord *ib = (dataRecord *)p2;
+
+// 	return (ia->pos - ib->pos);
+// }
+
+void createSortClusteredColumnIndex(Table* table, Column* column){
 	size_t columnSize = table->table_length;
 	ColumnIndex* pIndex = column->index;
 
 	fillDataIndex(column, columnSize);
 
 	dataRecord* colTuplesArr = pIndex->tuples;
-	qsort(colTuplesArr, columnSize, sizeof(dataRecord), cmprecordp);
+	qsort(colTuplesArr, columnSize, sizeof(dataRecord), cmprecordval);
 }
 
-void createTreeColumnIndex(Table* table, Column* column){
+void createTreeClusteredColumnIndex(Table* table, Column* column){
 	size_t i;
 	size_t columnSize = table->table_length;
 	ColumnIndex* pIndex = column->index;
@@ -333,6 +530,55 @@ void createTreeColumnIndex(Table* table, Column* column){
 	getTreeDataRecords(root, &(pIndex->tuples));
 }
 
+void createSortColumnUnClusteredIndex(Table* table, Column* column){
+	size_t columnSize = table->table_length;
+	ColumnIndex* pIndex = column->index;
+	dataRecord** colTuplesArr = &(pIndex->tuples);
+
+	//fillDataIndex(column, columnSize);
+	qsort(*colTuplesArr, columnSize, sizeof(dataRecord), cmprecordval);
+}
+
+void createTreeColumnUnClusteredIndex(Table* table, Column* column){
+	size_t i;
+	size_t columnSize = table->table_length;
+
+	ColumnIndex* pIndex = column->index;
+	dataRecord* colTuplesArr = pIndex->tuples;
+
+	node* root = NULL;
+	for(i=0; i<columnSize; i++){
+		dataRecord* lColTuple = &(colTuplesArr[i]);
+		int basePos = lColTuple->pos;
+		int value = lColTuple->val;
+		root = insert_in_tree(root, value, basePos);
+	}
+	pIndex->dataIndex = root;
+	if(columnSize >= pIndex->index_data_capacity){
+		pIndex->index_data_capacity = columnSize + 1;
+		pIndex->tuples = (dataRecord*)realloc(pIndex->tuples, (pIndex->index_data_capacity) * sizeof(dataRecord));
+	}
+}
+
+void create_unclustered_index(Table* table){
+	size_t idx = 0;
+	size_t numColumns = table->col_count;
+	//Create unclustered index
+	while(idx < numColumns){
+		Column* chcolumn = &(table->columns[idx]);
+		ColumnIndex* pchIndex = chcolumn->index;
+	    if(pchIndex != NULL && pchIndex->unclustered){
+	    	if(pchIndex->indexType == SORTED){
+				createSortColumnUnClusteredIndex(table, chcolumn);
+			}
+			else if(pchIndex->indexType == BTREE){
+				createTreeColumnUnClusteredIndex(table, chcolumn);
+			}
+	    }
+	    idx++;
+	}
+}
+
 void form_column_index(Table* table){
 	size_t i=0, j=0, k = 0, col_Idx = 0;
 	size_t numColumns = table->col_count;
@@ -344,13 +590,13 @@ void form_column_index(Table* table){
 		ColumnIndex* pIndex = column->index;
 	    if(pIndex != NULL && pIndex->clustered){
 			if(strcmp(table->firstDeclaredClustCol, column->name) == 0){
-				colNumFirstClust = i;
+				colNumFirstClust = col_Idx;
 			}
 			if(pIndex->indexType == SORTED){
-				createSortColumnIndex(table, column);
+				createSortClusteredColumnIndex(table, column);
 			}
 			else if(pIndex->indexType == BTREE){
-				createTreeColumnIndex(table, column);
+				createTreeClusteredColumnIndex(table, column);
 			}
 
 		    for(i=0; i<numColumns; i++){
@@ -360,17 +606,17 @@ void form_column_index(Table* table){
 		        	otherColumn->index = (ColumnIndex*)malloc(sizeof(ColumnIndex));
 		            memset(otherColumn->index, 0, sizeof(ColumnIndex));
 		            pOtherColumnIndex = otherColumn->index;
-		            pOtherColumnIndex->index_data_capacity = 200;
-		            pOtherColumnIndex->index_size = 0;
+		            pOtherColumnIndex->index_data_capacity = columnSize;
 		            pOtherColumnIndex->tuples = (dataRecord*)
-		            							malloc(sizeof(dataRecord) * (pOtherColumnIndex->index_data_capacity));
+		            							malloc(sizeof(dataRecord)*(pOtherColumnIndex->index_data_capacity));
 		            memset(pOtherColumnIndex->tuples, 0, sizeof(dataRecord)*(pOtherColumnIndex->index_data_capacity));
 		        }else{
 		        	if(!(pOtherColumnIndex->clustered)){
-		        		if(columnSize >= pOtherColumnIndex->index_data_capacity){
+		        		if(columnSize > pOtherColumnIndex->index_data_capacity){
 							pOtherColumnIndex->index_data_capacity = columnSize + 1;
 		            		pOtherColumnIndex->tuples=(dataRecord*)
-		            			realloc(pOtherColumnIndex->tuples,(pOtherColumnIndex->index_data_capacity)*sizeof(dataRecord));
+		            			realloc(pOtherColumnIndex->tuples,
+		            				(pOtherColumnIndex->index_data_capacity)*sizeof(dataRecord));
 		            	}
 		        	}
 		        }
@@ -393,12 +639,14 @@ void form_column_index(Table* table){
 						dataRecord* tColTuple = &(tIndex->tuples[k]);
 						tColTuple->pos = basePos;
 						tColTuple->val = baseData[basePos];
-						(tIndex->index_size)++;
 					}
 				}
 		    }
 		}
 	}
+
+	create_unclustered_index(table);
+	
 }
 
 /** execute_DbOperator takes as input the DbOperator and executes the query.
@@ -538,12 +786,29 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         			int *resultColValues = (int*)malloc(sizeof(int) * (pResult->num_tuples));
         			memset(resultColValues, 0, sizeof(int) * (pResult->num_tuples));
         			int* pPayload = (int*)pResult->payload;
+        			ColumnIndex* pIndex = column->index;
         			int k = 0;
-        			for(i=0; i<(pResult->num_tuples); i++){
-        				resultColValues[k++] = column->data[pPayload[i]];
+        			if(pIndex != NULL){
+        				dataRecord* colTuplesArr = pIndex->tuples;
+        				if(pResult->lower_idx != -1 && pResult->upper_idx != -1){
+	        				size_t dataIndexLow = pResult->lower_idx;
+							size_t dataIndexHigh = pResult->upper_idx;
+							for(i=dataIndexLow; i<=dataIndexHigh; i++){
+								resultColValues[k++] = (colTuplesArr[i]).val;
+							}
+						}else{
+							qsort(pPayload, pResult->num_tuples, sizeof(int), cmppos);
+							for(i=0; i<(pResult->num_tuples); i++){
+	        					resultColValues[k++] = column->data[pPayload[i]];
+	        				}
+	        			}
+        			}else{
+	        			for(i=0; i<(pResult->num_tuples); i++){
+	        				resultColValues[k++] = column->data[pPayload[i]];
+	        			}
         			}
         			if(context->chandles_in_use == context->chandle_slots){
-			            context->chandle_slots *= 2; 
+			            context->chandle_slots *= 5; 
 			            context->chandle_table = (GeneralizedColumnHandle*)
 			                            realloc(context->chandle_table, (context->chandle_slots) * sizeof(GeneralizedColumnHandle));
         			}
