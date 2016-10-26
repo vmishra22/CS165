@@ -852,7 +852,7 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         handle = NULL;
     }
 
-    cs165_log(stdout, "QUERY: %s\n", query_command);
+    //cs165_log(stdout, "QUERY: %s\n", query_command);
 
     send_message->status = OK_WAIT_FOR_RESPONSE;
     query_command = trim_whitespace(query_command);

@@ -82,5 +82,6 @@ node* read_tree_from_file(FILE* fp);
 int find_result_indices_scan_unclustered_select(node * root, int key_start, int key_end, int* resultIndices);
 int find_lower_index_clustered(node* root, long int lowVal);
 int find_higher_index_clustered(node* root, long int highVal);
+node * destroy_tree(node * root);
 
 #endif

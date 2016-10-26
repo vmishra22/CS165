@@ -372,6 +372,13 @@ Status shutdown_server(){
 				free(colData);
 			ColumnIndex* index = (current_db->tables[i]).columns[j].index;
 			if(index != NULL){
+				if(index->tuples != NULL)
+					free(index->tuples);
+				if(index->indexType == BTREE){
+					node* root = index->dataIndex;
+					if(root != NULL)
+						destroy_tree(root);
+				}
 				free(index);
 			}
 		}

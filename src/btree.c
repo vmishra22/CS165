@@ -323,7 +323,7 @@ int find_range( node * root, int key_start, int key_end, bool verbose,
 
 int find_lower_index_clustered(node* root, long int lowVal){
 	int i;
-	node * n = find_leaf( root, lowVal, true );
+	node * n = find_leaf( root, lowVal, false );
 	if (n == NULL) return 0;
 	for (i = 0; i < n->num_keys && n->keys[i] < lowVal; i++) ;
 	if (i == n->num_keys) return 0;
@@ -332,10 +332,11 @@ int find_lower_index_clustered(node* root, long int lowVal){
 
 int find_higher_index_clustered(node* root, long int highVal){
 	int i;
-	node * n = find_leaf( root, highVal, true );
+	node * n = find_leaf( root, highVal, false );
 	if (n == NULL) return 0;
 	for (i = 0; i < n->num_keys && n->keys[i] < highVal; i++) ;
 	if (i == n->num_keys) return 0;
+	if(i>0) i--;
 	return i;
 }
 

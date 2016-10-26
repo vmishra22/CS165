@@ -161,7 +161,7 @@ void parse_load_query(char* loadQuery, int client_socket){
             }
             load_send_message.length = payload_length;
 
-            cs165_log(stdout, payload);
+            //cs165_log(stdout, payload);
 
             if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
                 log_err("Failed to send message header.");
