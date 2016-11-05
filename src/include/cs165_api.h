@@ -184,14 +184,7 @@ typedef struct GeneralizedColumnHandle {
     char name[HANDLE_MAX_SIZE];
     GeneralizedColumn generalized_column;
 } GeneralizedColumnHandle;
-/*
- * holds the information necessary to refer to generalized columns (results or columns)
- */
-typedef struct ClientContext {
-    GeneralizedColumnHandle* chandle_table;
-    int chandles_in_use;
-    int chandle_slots;
-} ClientContext;
+
 
 /**
  * comparator
@@ -216,6 +209,7 @@ typedef enum OperatorType {
     INSERT,
     OPEN,
     SELECT, 
+    BATCH,
     FETCH, 
     PRINT, 
     AVG_SUM,
@@ -247,6 +241,11 @@ typedef struct SelectOperator {
     Comparator* comparator;
     Table* table;
 } SelectOperator;
+
+typedef struct BatchOperator {
+    int numSelOperators; 
+    SelectOperator* selOperators;
+} BatchOperator;
 /*
  * necessary fields for fetch
  */
@@ -304,6 +303,17 @@ typedef union OperatorFields {
     AddSubOperator add_sub_operator;
     MaxMinOperator max_min_operator;
 } OperatorFields;
+
+/*
+ * holds the information necessary to refer to generalized columns (results or columns)
+ */
+typedef struct ClientContext {
+    GeneralizedColumnHandle* chandle_table;
+    int chandles_in_use;
+    int chandle_slots;
+    BatchOperator* batchOperator;
+} ClientContext;
+
 /*
  * DbOperator holds the following fields:
  * type: the type of operator to perform (i.e. insert, select, ...)
@@ -332,6 +342,8 @@ typedef struct Catalog
     char columnIndexType[MAX_TABLE_SIZE][MAX_COLUMN_SIZE][MAX_SIZE_NAME];
     char columnIndexClustType[MAX_TABLE_SIZE][MAX_COLUMN_SIZE][MAX_SIZE_NAME];
 }Catalog;
+
+
 
 extern Db *current_db;
  

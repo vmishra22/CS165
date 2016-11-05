@@ -4,6 +4,14 @@
 #include "cs165_api.h"
 #include "btree.h"
 
+typedef struct ThreadScanData{
+	void* data;
+	size_t startIdx;
+	size_t endIdx;
+	Comparator* pComparator;
+	GeneralizedColumnHandle* pGenHandle;
+	size_t dataSize;
+}ThreadScanData;
 
 Table* lookup_table(char *name);
 

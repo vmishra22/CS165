@@ -12,7 +12,7 @@ CC = gcc -std=c99 -g -ggdb3
 O ?= 1
 
 # Flags and other libraries
-override CFLAGS += -Wall -Wextra -pedantic -pthread -O$(O) -I$(INCLUDES)
+override CFLAGS += -Wall -Wextra -pedantic -pthread -O$(O) -I$(INCLUDES) -D THPOOL_DEBUG -D_POSIX_C_SOURCE=200809L
 LDFLAGS =
 LIBS =
 INCLUDES = include
@@ -55,7 +55,7 @@ $(DEPSDIR)/stamp $(BUILDSTAMP):
 client: client.o utils.o
 	$(CC) $(CFLAGS) $(DEPCFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
 
-server: server.o parse.o utils.o db_manager.o client_context.o btree.o
+server: server.o parse.o utils.o db_manager.o thpool.o client_context.o btree.o 
 	$(CC) $(CFLAGS) $(DEPCFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
 
 clean:

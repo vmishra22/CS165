@@ -2,7 +2,7 @@
 #include "client_context.h"
 #include <string.h>
 #include "utils.h"
-
+#include "thpool.h"
 
 
 
@@ -23,7 +23,7 @@ Column* retrieve_column_for_scan(Table* table, char* colname, bool loadData){
 	for(i=0; i<numColumns; i++){
 		if(strcmp(table->columns[i].name, colname) == 0){
 			Column* scanColumn = &(table->columns[i]);
-			if(loadData){
+			if(loadData && scanColumn->data == NULL){
 				char colPath[256];
 				strcpy(colPath, "../data/");
 				strcat(colPath, current_db->name);
@@ -649,6 +649,45 @@ void form_column_index(Table* table){
 	
 }
 
+void shared_scan(void* threadScanData){
+	ThreadScanData* scanData = (ThreadScanData*)threadScanData;
+	int* data = scanData->data;
+    Comparator* selComp = scanData->pComparator;
+    GeneralizedColumnHandle* pGenHandle = scanData->pGenHandle;
+
+    size_t i=0, j=0;
+
+	//For storing result of current processing
+	int *resultIndices = NULL;
+	Result* pResult = NULL;
+
+	//Check if some data has already been processed in the previous run.
+	if(pGenHandle->generalized_column.column_pointer.result == NULL)
+    {
+		pResult = (Result*)malloc(sizeof(Result));
+		memset(pResult, 0, sizeof(Result));
+		resultIndices = (int*)malloc(sizeof(int) * 1000);
+		memset(resultIndices, 0, sizeof(int)*1000);
+		pResult->data_type = INT;
+		pResult->payload = resultIndices;
+		pGenHandle->generalized_column.column_pointer.result = pResult;
+	}
+	else{
+		pResult = pGenHandle->generalized_column.column_pointer.result;
+		j = pResult->num_tuples;
+		resultIndices = pResult->payload;
+	}
+	
+	for (i=scanData->startIdx; i<scanData->endIdx; i++){
+		if(data[i] >= selComp->p_low && data[i] < selComp->p_high)
+			resultIndices[j++]=i;
+	}
+	
+	pResult->lower_idx = -1;
+	pResult->upper_idx = -1;
+	pResult->num_tuples = j;
+}
+
 /** execute_DbOperator takes as input the DbOperator and executes the query.
  **/
 void execute_DbOperator(DbOperator* query, char** msg) {
@@ -714,6 +753,88 @@ void execute_DbOperator(DbOperator* query, char** msg) {
             break;
         case OPEN:
             break;
+        case BATCH:
+        {
+        	BatchOperator* pOperator = context->batchOperator;
+        	int numOperators = pOperator->numSelOperators;
+        	SelectOperator* pSelOperators = pOperator->selOperators;
+        	if( numOperators <= 0)
+        		break;
+
+        	//Get a comparator from any select operator.
+        	//Assumption that batch is being run on the same column.
+        	comparator = pSelOperators[0].comparator;
+        	GeneralizedColumn* pGenColumn = comparator->gen_col;
+        	column = pGenColumn->column_pointer.column;
+
+        	table = pSelOperators[0].table;
+        	size_t columnSize = table->table_length;
+        	int* data = column->data;
+
+        	//divide the data into page sizes
+        	//Each operator gets 4KB for result
+        	size_t page_size = 64*1024 - (numOperators*4*1024);
+        	size_t num_pages = (columnSize<<2)/page_size;
+        	//data_rem is #column elements for the last page
+        	size_t data_rem = ((columnSize<<2) % page_size)>>2;
+        	//data_page is #column elements for full page
+        	size_t data_page = page_size>>2;
+        	num_pages++; //at least 1 page is required
+
+        	//create the thread pool with #threads same as #operators.
+        	threadpool thpool = thpool_init(numOperators);
+
+        	//ThreadScanData is argument for a thread. Each array element would correspond to a thread.
+        	ThreadScanData* pQueryScanDataArr = (ThreadScanData*) malloc(sizeof(ThreadScanData) * numOperators);
+        	memset(pQueryScanDataArr, 0, sizeof(ThreadScanData) * numOperators);
+        	for(j=0; j<numOperators; j++){
+        		SelectOperator* pSelOperator = &(pSelOperators[j]);
+        		Comparator* pComp = pSelOperator->comparator;
+        		ThreadScanData* pScanData = &(pQueryScanDataArr[j]);
+        		GeneralizedColumnHandle* pGenHandle = NULL;
+	    		pGenHandle = check_for_existing_handle(context, pComp->handle);
+	    		if(pGenHandle != NULL){
+	    			if(pGenHandle->generalized_column.column_pointer.result != NULL)
+		            {
+		                if((pGenHandle->generalized_column.column_pointer.result)->payload != NULL)
+		                    free((pGenHandle->generalized_column.column_pointer.result)->payload);
+		                free(pGenHandle->generalized_column.column_pointer.result);
+		            }
+	    		}
+	    		else{
+	    			pGenHandle = &(context->chandle_table[context->chandles_in_use]);
+	    			strcpy(pGenHandle->name, pComp->handle);
+	    			context->chandles_in_use++;
+	        		pGenHandle->generalized_column.column_type = RESULT;
+	    		}
+
+	    		pScanData->pGenHandle = pGenHandle;
+        		pScanData->pComparator = pComp;
+        		pScanData->data = data;
+        	}
+
+        	size_t dataSize;
+        	size_t pageIdx = 0;
+        	for(pageIdx=0; pageIdx<num_pages; pageIdx++){
+        		dataSize = 0;
+        		//Last page to process
+        		if(pageIdx==num_pages-1)
+        			dataSize = data_rem;
+        		else
+        			dataSize = data_page;
+        		for(j=0; j<numOperators; j++){
+        			ThreadScanData* pScanData = &(pQueryScanDataArr[j]);
+        			pScanData->dataSize = dataSize;
+        			pScanData->startIdx = pageIdx*data_page;
+        			pScanData->endIdx = pageIdx*data_page + dataSize;
+        			thpool_add_work(thpool, shared_scan, (void*)pScanData);
+        		}
+        		
+        	}
+        	thpool_wait(thpool);
+        
+        	break;
+        }
         case SELECT:
         {
         	comparator = query->operator_fields.select_operator.comparator;

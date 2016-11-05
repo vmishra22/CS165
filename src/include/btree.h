@@ -8,9 +8,6 @@
 #include "cs165_api.h"
 
 #define DEFAULT_ORDER 4
-
-// Minimum order is necessarily 3.  We set the maximum
-// order arbitrarily.  You may change the maximum order.
 #define MIN_ORDER 3
 #define MAX_ORDER 4000
 
@@ -27,8 +24,6 @@ typedef struct node {
 	int num_keys;
 	struct node * next; 
 } node;
-
-
 
 // Output and utility.
 void enqueue( node * new_node );

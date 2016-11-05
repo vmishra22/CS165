@@ -784,10 +784,6 @@ DbOperator* parse_select(char* query_command, char* handle, ClientContext* conte
         }
         high_val[last_char] = '\0';
         
-        DbOperator* dbo = malloc(sizeof(DbOperator));
-        dbo->type = SELECT;
-        dbo->operator_fields.select_operator.table = scan_table;
-
         Comparator* comparator = malloc(sizeof(Comparator));
         memset(comparator, 0, sizeof(Comparator));
         if(strcmp(low_val, "null") == 0){
@@ -812,12 +808,25 @@ DbOperator* parse_select(char* query_command, char* handle, ClientContext* conte
         comparator->handle = (char*)malloc(strlen(handle) + 1);
         strcpy(comparator->handle, handle);
 
-        dbo->operator_fields.select_operator.comparator = comparator;
-        free(tempToFree);
+        DbOperator* dbo = NULL;
+        if(context->batchOperator != NULL){
+            SelectOperator* selOperator = (SelectOperator*)malloc(sizeof(SelectOperator));
+            memset(selOperator, 0, sizeof(SelectOperator));
+            selOperator->table = scan_table;
+            selOperator->comparator = comparator;
+            int selOperators = context->batchOperator->numSelOperators;
+            context->batchOperator->selOperators[selOperators++] = *selOperator;
+            context->batchOperator->numSelOperators = selOperators;
+        }else{
+            dbo = malloc(sizeof(DbOperator));
+            dbo->type = SELECT;
+            dbo->operator_fields.select_operator.table = scan_table;
+            dbo->operator_fields.select_operator.comparator = comparator;
+        }
 
+        free(tempToFree);
         send_message->status = OK_WAIT_FOR_RESPONSE;
         return dbo;
-        
     }else {
         send_message->status = UNKNOWN_COMMAND;
         return NULL;
@@ -870,8 +879,18 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         query_command += 4;
         dbo = parse_load(query_command, send_message);
 
-    }
-    else if (strncmp(query_command, "select", 6) == 0){
+    }else if (strncmp(query_command, "batch_queries", 11) == 0){
+        query_command += 11;
+        BatchOperator* batchOperator = (BatchOperator*)malloc(sizeof(BatchOperator));
+        memset(batchOperator, 0, sizeof(BatchOperator));
+        batchOperator->selOperators = (SelectOperator*)malloc(10*sizeof(SelectOperator));
+        context->batchOperator = batchOperator;
+
+    }else if (strncmp(query_command, "batch_execute", 13) == 0){
+        dbo = malloc(sizeof(DbOperator));
+        dbo->type = BATCH;
+
+    }else if (strncmp(query_command, "select", 6) == 0){
         query_command += 6;
         dbo = parse_select(query_command, handle, context, send_message);
 
