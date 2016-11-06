@@ -9,10 +9,10 @@ all: client server
 CC = gcc -std=c99 -g -ggdb3
 
 # Default optimization level
-O ?= 1
+O ?= 3
 
 # Flags and other libraries
-override CFLAGS += -Wall -Wextra -pedantic -pthread -O$(O) -I$(INCLUDES) -D THPOOL_DEBUG -D_POSIX_C_SOURCE=200809L
+override CFLAGS += -Wall -Wextra -pedantic -pthread -O$(O) -I$(INCLUDES) -D_POSIX_C_SOURCE=200809L
 LDFLAGS =
 LIBS =
 INCLUDES = include

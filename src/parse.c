@@ -321,7 +321,8 @@ DbOperator* parse_load(char* query_command, message* send_message) {
                     for(i=0; i<numColumns; i++){
                         Column* resizeColumn = NULL;
                         resizeColumn = &(table->columns[i]);
-                        resizeColumn->data = (int*)realloc(resizeColumn->data, (table->col_data_capacity) * sizeof(int));
+                        int* tempColData = (int*)realloc(resizeColumn->data, (table->col_data_capacity) * sizeof(int));
+                        resizeColumn->data = tempColData;
                     }
                 }
                 column->data[dataSize] = load_val;

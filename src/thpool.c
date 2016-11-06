@@ -1,12 +1,4 @@
-/* ********************************
- * Author:       Johan Hanssen Seferidis
- * License:	     MIT
- * Description:  Library providing a threading pool where you can add
- *               work. For usage, check the thpool.h file or README.md
- *
- *//** @file thpool.h *//*
- * 
- ********************************/
+
 #include <unistd.h>
  #include <sys/types.h>
 
@@ -29,11 +21,7 @@
 #endif
 
 static volatile int threads_keepalive;
-static volatile int threads_on_hold;
-
-
-
-/* ========================== STRUCTURES ============================ */
+static volatile int make_thread_wait;
 
 
 /* Binary semaphore */
@@ -82,14 +70,9 @@ typedef struct thpool_{
 
 
 
-
-
-/* ========================== PROTOTYPES ============================ */
-
-
-static int  thread_init(thpool_* thpool_p, struct thread** thread_p, int id);
+static int  initialize_thread(thpool_* thpool_p, struct thread** thread_p, int id);
 static void* thread_do(void* thread_p);
-static void  thread_hold();
+static void  pause_thread();
 static void  thread_destroy(struct thread* thread_p);
 
 static int   jobqueue_init(thpool_* thpool_p);
@@ -114,7 +97,7 @@ static void  bsem_wait(struct bsem *bsem_p);
 /* Initialise thread pool */
 struct thpool_* thpool_init(int num_threads){
 
-	threads_on_hold   = 0;
+	make_thread_wait   = 0;
 	threads_keepalive = 1;
 
 	if (num_threads < 0){
@@ -154,7 +137,7 @@ struct thpool_* thpool_init(int num_threads){
 	/* Thread init */
 	int n;
 	for (n=0; n<num_threads; n++){
-		thread_init(thpool_p, &thpool_p->threads[n], n);
+		initialize_thread(thpool_p, &thpool_p->threads[n], n);
 		if (THPOOL_DEBUG)
 			printf("THPOOL_DEBUG: Created thread %d in pool \n", n);
 	}
@@ -252,7 +235,7 @@ void thpool_pause(thpool_* thpool_p) {
 /* Resume all threads in threadpool */
 void thpool_resume(thpool_* thpool_p) {
 	if(thpool_p != NULL)
-		threads_on_hold = 0;
+		make_thread_wait = 0;
 }
 
 
@@ -268,11 +251,11 @@ void thpool_resume(thpool_* thpool_p) {
  * @param id            id to be given to the thread
  * @return 0 on success, -1 otherwise.
  */
-static int thread_init (thpool_* thpool_p, struct thread** thread_p, int id){
+static int initialize_thread (thpool_* thpool_p, struct thread** thread_p, int id){
 	
 	*thread_p = (struct thread*)malloc(sizeof(struct thread));
 	if (thread_p == NULL){
-		fprintf(stderr, "thread_init(): Could not allocate memory for thread\n");
+		fprintf(stderr, "initialize_thread(): Could not allocate memory for thread\n");
 		return -1;
 	}
 
@@ -286,9 +269,9 @@ static int thread_init (thpool_* thpool_p, struct thread** thread_p, int id){
 
 
 /* Sets the calling thread on hold */
-static void thread_hold () {
-	threads_on_hold = 1;
-	while (threads_on_hold){
+static void pause_thread () {
+	make_thread_wait = 1;
+	while (make_thread_wait){
 		sleep(1);
 	}
 }
@@ -325,7 +308,7 @@ static void* thread_do(void* thread_p1){
 	struct sigaction act;
 	sigemptyset(&act.sa_mask);
 	act.sa_flags = 0;
-	act.sa_handler = thread_hold;
+	act.sa_handler = pause_thread;
 	if (sigaction(SIGUSR1, &act, NULL) == -1) {
 		fprintf(stderr, "thread_do(): cannot handle SIGUSR1");
 	}
@@ -380,13 +363,6 @@ static void* thread_do(void* thread_p1){
 static void thread_destroy (thread* thread_p){
 	free(thread_p);
 }
-
-
-
-
-
-/* ============================ JOB QUEUE =========================== */
-
 
 /* Initialize queue */
 static int jobqueue_init(thpool_* thpool_p){

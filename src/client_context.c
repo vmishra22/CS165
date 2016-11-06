@@ -1,6 +1,7 @@
 
 #include "client_context.h"
 #include <string.h>
+#include <unistd.h>
 #include "utils.h"
 #include "thpool.h"
 
@@ -692,7 +693,7 @@ void shared_scan(void* threadScanData){
  **/
 void execute_DbOperator(DbOperator* query, char** msg) {
     
-    char defaultMsg[] = "--Operation Succeeded\n";
+    char defaultMsg[] = "--\n";
     strcpy(*msg, defaultMsg);
     if(!query)
         return;
@@ -773,7 +774,8 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 
         	//divide the data into page sizes
         	//Each operator gets 4KB for result
-        	size_t page_size = 64*1024 - (numOperators*4*1024);
+        	size_t system_page_size = sysconf(_SC_PAGESIZE);
+        	size_t page_size = system_page_size - (numOperators*system_page_size*0.05);
         	size_t num_pages = (columnSize<<2)/page_size;
         	//data_rem is #column elements for the last page
         	size_t data_rem = ((columnSize<<2) % page_size)>>2;
@@ -829,9 +831,9 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         			pScanData->endIdx = pageIdx*data_page + dataSize;
         			thpool_add_work(thpool, shared_scan, (void*)pScanData);
         		}
-        		
+        		thpool_wait(thpool);
         	}
-        	thpool_wait(thpool);
+        	
         
         	break;
         }

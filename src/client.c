@@ -117,23 +117,30 @@ void parse_load_query(char* loadQuery, int client_socket){
                 strcat(col_values[i], ",");
             }
             
+            size_t string_curr_length = 0;
             while (fgets(buf, 1024, fd)){
                 int j=0;
                 char* token = NULL;
                 char* tmp, *tmpToFree;
                 tmp = tmpToFree = strdup(buf);
                 trim_newline(tmp);
-                if(strlen(col_values[0]) >= col_val_capacity * 0.8 ){
-                    col_val_capacity *= 10; 
+                if(string_curr_length > col_val_capacity * 0.8 ){
+                    col_val_capacity *= 20; 
                     for(i=0; i<nCols; i++){
-                        col_values[i] = (char*)realloc(col_values[i], col_val_capacity * sizeof(char));
+                         char* temp_col_values = (char*)realloc(col_values[i], col_val_capacity * sizeof(char));
+                         col_values[i] = temp_col_values;
                     }
                 }
-                while ((token = strsep(&tmp, ",")) != NULL && strlen(token) > 0) {
+                size_t token_len = 0;
+                while ((token = strsep(&tmp, ",")) != NULL && (token_len = strlen(token)) > 0) {
+                    string_curr_length += token_len;
                     strcat(col_values[j], token);
                     strcat(col_values[j], ",");
+                    
                     j++;
                 }
+                //cs165_log(stdout, "%s \n", col_values[0]);
+                //cs165_log(stdout, "len: %zu \n", string_curr_length);
             }
             size_t payload_length = 0;
             for(i=0; i<nCols; i++){
