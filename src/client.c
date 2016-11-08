@@ -85,7 +85,7 @@ void parse_load_query(char* loadQuery, int client_socket){
         unsigned long actual_size = ftell(fd);
         rewind(fd);
 
-        printf("In file size = %ld bytes.\n", actual_size);
+        //printf("In file size = %ld bytes.\n", actual_size);
         size_t unit_size = 1<<12;
         size_t num_chunks = 0;
         num_chunks = actual_size / unit_size;
@@ -268,7 +268,7 @@ void parse_load_query(char* loadQuery, int client_socket){
                         load_send_message.length = payload_length;
 
                         //cs165_log(stdout, payload);
-                        printf("payload_length:%zu\n", payload_length);
+                       // printf("payload_length:%zu\n", payload_length);
                         if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
                             log_err("Failed to send message header.");
                             exit(1);
@@ -282,10 +282,10 @@ void parse_load_query(char* loadQuery, int client_socket){
                         
                         // Always wait for server response (even if it is just an OK message)
                         if ((len = recv(client_socket, &(load_recv_message), sizeof(message), 0)) > 0) {
-                            printf("Length Received:%d\n", len);
+                            //printf("Length Received:%d\n", len);
                             if (load_recv_message.status == OK_WAIT_FOR_RESPONSE &&
                                 (int) load_recv_message.length > 0) {
-                                printf("Message Received with length:%d\n", (int) load_recv_message.length);
+                                //printf("Message Received with length:%d\n", (int) load_recv_message.length);
                                 // Calculate number of bytes in response package
                                 int num_bytes = (int) load_recv_message.length;
                                 char payloadRecv[num_bytes + 1];
@@ -309,7 +309,7 @@ void parse_load_query(char* loadQuery, int client_socket){
                                 }
                             }
                             else{
-                                printf("Length Received But Message Length:%d\n", (int) load_recv_message.length);
+                               // printf("Length Received But Message Length:%d\n", (int) load_recv_message.length);
                             }
                         }
                         else {
@@ -363,7 +363,7 @@ void parse_load_query(char* loadQuery, int client_socket){
                     load_send_message.length = payload_length;
 
                     //cs165_log(stdout, payload);
-                    printf("payload_length:%zu\n", payload_length);
+                    //printf("payload_length:%zu\n", payload_length);
                     if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
                         log_err("Failed to send message header.");
                         exit(1);
@@ -377,10 +377,10 @@ void parse_load_query(char* loadQuery, int client_socket){
                     
                     // Always wait for server response (even if it is just an OK message)
                     if ((len = recv(client_socket, &(load_recv_message), sizeof(message), 0)) > 0) {
-                        printf("Length Received:%d\n", len);
+                        //printf("Length Received:%d\n", len);
                         if (load_recv_message.status == OK_WAIT_FOR_RESPONSE &&
                             (int) load_recv_message.length > 0) {
-                            printf("Message Received with length:%d\n", (int) load_recv_message.length);
+                            //printf("Message Received with length:%d\n", (int) load_recv_message.length);
                             // Calculate number of bytes in response package
                             int num_bytes = (int) load_recv_message.length;
                             char payloadRecv[num_bytes + 1];

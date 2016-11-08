@@ -298,7 +298,7 @@ DbOperator* parse_load(char* query_command, message* send_message) {
         size_t dataSize = 0;
         dataSize = table->table_length;
 
-        printf("Column Name:%s\n", col_name);
+        //printf("Column Name:%s\n", col_name);
 
         while ((token = strsep(command_index, ",")) != NULL) {
             if(strncmp(token, "load", 4) == 0){
@@ -307,7 +307,7 @@ DbOperator* parse_load(char* query_command, message* send_message) {
                 strsep(&db_tbl_col_name, ".");
                 tbl_name = strsep(&db_tbl_col_name, ".");
                 col_name = db_tbl_col_name;
-                printf("Column Name:%s\n", col_name);
+                //printf("Column Name:%s\n", col_name);
                 for(j=0; j<numColumns; j++){
                     column = &(table->columns[j]);
                     if(strcmp(column->name, col_name) == 0)
@@ -336,7 +336,7 @@ DbOperator* parse_load(char* query_command, message* send_message) {
             }
         }
         table->table_length = dataSize;
-        printf("table_length : %zu\n", dataSize);
+        //printf("table_length : %zu\n", dataSize);
 
         if (columns_inserted != numColumns) {
 

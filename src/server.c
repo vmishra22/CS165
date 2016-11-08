@@ -118,7 +118,6 @@ void handle_client(int client_socket) {
             recv_message.payload = recv_buffer;
             recv_message.payload[recv_message.length] = '\0';
 
-            printf("In file size = %d bytes.\n", length);
             // 1. Parse command
             DbOperator* query = NULL;
             query = parse_command(recv_message.payload, &send_message, client_socket, client_context);
