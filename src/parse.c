@@ -263,6 +263,7 @@ DbOperator* parse_load(char* query_command, message* send_message) {
     size_t i = 0, j = 0;
     unsigned int columns_inserted = 0;
     char* token = NULL;
+    //printf("Query: %s\n", query_command);
     if (strncmp(query_command, "(", 1) == 0) {
         query_command++;
         char** command_index = &query_command;
@@ -294,7 +295,11 @@ DbOperator* parse_load(char* query_command, message* send_message) {
         
 
         columns_inserted++;
-        size_t dataSize = -1;
+        size_t dataSize = 0;
+        dataSize = table->table_length;
+
+        printf("Column Name:%s\n", col_name);
+
         while ((token = strsep(command_index, ",")) != NULL) {
             if(strncmp(token, "load", 4) == 0){
                 token += 5;
@@ -302,11 +307,12 @@ DbOperator* parse_load(char* query_command, message* send_message) {
                 strsep(&db_tbl_col_name, ".");
                 tbl_name = strsep(&db_tbl_col_name, ".");
                 col_name = db_tbl_col_name;
+                printf("Column Name:%s\n", col_name);
                 for(j=0; j<numColumns; j++){
                     column = &(table->columns[j]);
                     if(strcmp(column->name, col_name) == 0)
                     {
-                        dataSize = -1;
+                        dataSize = table->table_length;
                         columns_inserted++;
                         break;
                     }
@@ -314,10 +320,10 @@ DbOperator* parse_load(char* query_command, message* send_message) {
             }else{
 
                 int load_val = atoi(token);
-                dataSize++;
+                
                 //check if the column data size need to be modified.
                 if(dataSize == table->col_data_capacity){
-                    table->col_data_capacity *= 200; 
+                    table->col_data_capacity *= 5; 
                     for(i=0; i<numColumns; i++){
                         Column* resizeColumn = NULL;
                         resizeColumn = &(table->columns[i]);
@@ -326,11 +332,14 @@ DbOperator* parse_load(char* query_command, message* send_message) {
                     }
                 }
                 column->data[dataSize] = load_val;
+                dataSize++;
             }
         }
-        table->table_length = dataSize+1;
+        table->table_length = dataSize;
+        printf("table_length : %zu\n", dataSize);
 
         if (columns_inserted != numColumns) {
+
             send_message->status = INCORRECT_FORMAT;
             return NULL;
         } 

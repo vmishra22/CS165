@@ -112,15 +112,18 @@ void handle_client(int client_socket) {
         }
 
         if (!done) {
+            //char* recv_buffer = (char*)malloc((recv_message.length)*sizeof(char));
             char recv_buffer[recv_message.length];
             length = recv(client_socket, recv_buffer, recv_message.length,0);
             recv_message.payload = recv_buffer;
             recv_message.payload[recv_message.length] = '\0';
 
+            printf("In file size = %d bytes.\n", length);
             // 1. Parse command
             DbOperator* query = NULL;
             query = parse_command(recv_message.payload, &send_message, client_socket, client_context);
 
+            //free(recv_buffer);
             // 2. Handle request
             char* payload_to_client = (char*)malloc(MAX_RESPONSE_SIZE);
             memset(payload_to_client, '\0', MAX_RESPONSE_SIZE);

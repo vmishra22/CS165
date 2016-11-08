@@ -784,7 +784,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	num_pages++; //at least 1 page is required
 
         	//create the thread pool with #threads same as #operators.
-        	threadpool thpool = thpool_init(numOperators);
+        	threadpool* thpool = threadpool_init(numOperators);
 
         	//ThreadScanData is argument for a thread. Each array element would correspond to a thread.
         	ThreadScanData* pQueryScanDataArr = (ThreadScanData*) malloc(sizeof(ThreadScanData) * numOperators);
@@ -829,9 +829,9 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         			pScanData->dataSize = dataSize;
         			pScanData->startIdx = pageIdx*data_page;
         			pScanData->endIdx = pageIdx*data_page + dataSize;
-        			thpool_add_work(thpool, shared_scan, (void*)pScanData);
+        			threadpool_add_work(thpool, shared_scan, (void*)pScanData);
         		}
-        		thpool_wait(thpool);
+        		threadpool_wait(thpool);
         	}
         	
         

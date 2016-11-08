@@ -81,6 +81,16 @@ void parse_load_query(char* loadQuery, int client_socket){
         message load_send_message;
         message load_recv_message;
         FILE* fd = fopen(filePath, "r");
+        fseek(fd, 0, SEEK_END);
+        unsigned long actual_size = ftell(fd);
+        rewind(fd);
+
+        printf("In file size = %ld bytes.\n", actual_size);
+        size_t unit_size = 1<<12;
+        size_t num_chunks = 0;
+        num_chunks = actual_size / unit_size;
+        //size_t last_chunk_size = actual_size % unit_size;   
+
         if(fd != NULL){
             char buf[1024]; //TO CHECK: If buffer size if enough?
             char table_Name[256];
@@ -107,7 +117,7 @@ void parse_load_query(char* loadQuery, int client_socket){
                 free(tmpToFree);
             }
 
-            size_t col_val_capacity = 4*1024*1024;
+            size_t col_val_capacity = unit_size;
             char** col_values = (char**)malloc(sizeof(char*) * nCols);
             for(i=0; i<nCols; i++){
                 col_values[i] = (char*)malloc(sizeof(char) * col_val_capacity);
@@ -118,104 +128,309 @@ void parse_load_query(char* loadQuery, int client_socket){
             }
             
             size_t string_curr_length = 0;
-            while (fgets(buf, 1024, fd)){
-                int j=0;
-                char* token = NULL;
-                char* tmp, *tmpToFree;
-                tmp = tmpToFree = strdup(buf);
-                trim_newline(tmp);
-                if(string_curr_length > col_val_capacity * 0.8 ){
-                    col_val_capacity *= 20; 
-                    for(i=0; i<nCols; i++){
-                         char* temp_col_values = (char*)realloc(col_values[i], col_val_capacity * sizeof(char));
-                         col_values[i] = temp_col_values;
+
+            if(num_chunks == 0){
+                while (fgets(buf, 1024, fd)){
+                    int j=0;
+                    char* token = NULL;
+                    char* tmp, *tmpToFree;
+                    tmp = tmpToFree = strdup(buf);
+                    trim_newline(tmp);
+                    if(string_curr_length > col_val_capacity * 0.8 ){
+                        col_val_capacity *= 20; 
+                        for(i=0; i<nCols; i++){
+                             char* temp_col_values = (char*)realloc(col_values[i], col_val_capacity * sizeof(char));
+                             col_values[i] = temp_col_values;
+                        }
+                    }
+                    size_t token_len = 0;
+                    while ((token = strsep(&tmp, ",")) != NULL && (token_len = strlen(token)) > 0) {
+                        string_curr_length += token_len;
+                        strcat(col_values[j], token);
+                        strcat(col_values[j], ",");
+                        
+                        j++;
                     }
                 }
-                size_t token_len = 0;
-                while ((token = strsep(&tmp, ",")) != NULL && (token_len = strlen(token)) > 0) {
-                    string_curr_length += token_len;
-                    strcat(col_values[j], token);
-                    strcat(col_values[j], ",");
-                    
-                    j++;
+                 size_t payload_length = 0;
+                for(i=0; i<nCols; i++){
+                    size_t len = strlen(col_values[i]);
+                    int last_char = len - 1;
+                    col_values[i][last_char] = '\0';
+                    payload_length += len;
                 }
-                //cs165_log(stdout, "%s \n", col_values[0]);
-                //cs165_log(stdout, "len: %zu \n", string_curr_length);
-            }
-            size_t payload_length = 0;
-            for(i=0; i<nCols; i++){
-                size_t len = strlen(col_values[i]);
-                int last_char = len - 1;
-                col_values[i][last_char] = '\0';
-                payload_length += len;
-            }
-            for(i=0; i<nCols; i++){
-                if(i == nCols-1)
-                    strcat(col_values[i], ")\n");
-                else
-                    strcat(col_values[i], "),");
-            }
+                for(i=0; i<nCols; i++){
+                    if(i == nCols-1)
+                        strcat(col_values[i], ")\n");
+                    else
+                        strcat(col_values[i], "),");
+                }
+                
+                char *payload = NULL;
+                payload_length += (nCols*5);
+                payload = (char*) malloc(sizeof(char)* (payload_length));
+                memset(payload, '\0', (payload_length));
 
-            //Form the queries
+                for(i=0; i<nCols; i++){
+                    strcat(payload, col_values[i]);
+                }
+                load_send_message.length = payload_length;
 
-            char *payload = NULL;
-            payload_length += (nCols*5);
-            payload = (char*) malloc(sizeof(char)* (payload_length));
-            memset(payload, '\0', (payload_length));
+                //cs165_log(stdout, payload);
 
-            for(i=0; i<nCols; i++){
-                strcat(payload, col_values[i]);
-            }
-            load_send_message.length = payload_length;
+                if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
+                    log_err("Failed to send message header.");
+                    exit(1);
+                }
 
-            //cs165_log(stdout, payload);
+                // Send the payload (query) to server
+                if (send(client_socket, payload, load_send_message.length, 0) == -1) {
+                    log_err("Failed to send query payload.");
+                    exit(1);
+                }
+                
+                // Always wait for server response (even if it is just an OK message)
+                if ((len = recv(client_socket, &(load_recv_message), sizeof(message), 0)) > 0) {
+                    if (load_recv_message.status == OK_WAIT_FOR_RESPONSE &&
+                        (int) load_recv_message.length > 0) {
+                        // Calculate number of bytes in response package
+                        int num_bytes = (int) load_recv_message.length;
+                        char payloadRecv[num_bytes + 1];
 
-            if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
-                log_err("Failed to send message header.");
-                exit(1);
-            }
-
-            // Send the payload (query) to server
-            if (send(client_socket, payload, load_send_message.length, 0) == -1) {
-                log_err("Failed to send query payload.");
-                exit(1);
-            }
-            
-            // Always wait for server response (even if it is just an OK message)
-            if ((len = recv(client_socket, &(load_recv_message), sizeof(message), 0)) > 0) {
-                if (load_recv_message.status == OK_WAIT_FOR_RESPONSE &&
-                    (int) load_recv_message.length > 0) {
-                    // Calculate number of bytes in response package
-                    int num_bytes = (int) load_recv_message.length;
-                    char payloadRecv[num_bytes + 1];
-
-                    // Receive the payload and print it out
-                    if ((len = recv(client_socket, payloadRecv, num_bytes, 0)) > 0) {
-                        payloadRecv[num_bytes] = '\0';
-                        printf("%s\n", payloadRecv);
+                        // Receive the payload and print it out
+                        if ((len = recv(client_socket, payloadRecv, num_bytes, 0)) > 0) {
+                            payloadRecv[num_bytes] = '\0';
+                            printf("%s\n", payloadRecv);
+                        }
                     }
-                }
-            }
-            else {
-                if(payload != NULL)
-                    free(payload);
-                if (len < 0) {
-                    log_err("Failed to receive message.");
                 }
                 else {
-                    log_info("Server closed connection\n");
+                    if(payload != NULL)
+                        free(payload);
+                    if (len < 0) {
+                        log_err("Failed to receive message.");
+                    }
+                    else {
+                        log_info("Server closed connection\n");
+                    }
+                    exit(1);
                 }
-                exit(1);
+
+                if(payload != NULL)
+                    free(payload);
+
             }
+            else{
+                while (fgets(buf, 1024, fd)){
+                    int j=0;
+                    char* token = NULL;
+                    char* tmp, *tmpToFree;
+                    tmp = tmpToFree = strdup(buf);
+                    trim_newline(tmp);
+                
+                    size_t token_len = 0;
+                    while ((token = strsep(&tmp, ",")) != NULL && (token_len = strlen(token)) > 0) {
+                        string_curr_length += token_len;
+                        strcat(col_values[j], token);
+                        strcat(col_values[j], ",");
+                        j++;
+                    }
+                    memset(buf, '\0', 1024);
+                    if(string_curr_length >= (0.75 * unit_size)){
+                        size_t payload_length = 0;
+                        for(i=0; i<nCols; i++){
+                            size_t len = strlen(col_values[i]);
+                            int last_char = len - 1;
+                            //col_values[i][last_char] = '\0';
+                            if(i == nCols-1)
+                            {
+                                col_values[i][last_char] = ')';
+                                col_values[i][last_char+1] = '\n';
+                                col_values[i][last_char+2] = '\0';
+                            }
+                            else
+                            {
+                                col_values[i][last_char] = ')';
+                                col_values[i][last_char+1] = ',';
+                                col_values[i][last_char+2] = '\0';
+                            }
+                            payload_length += (len+2);
+                        }
+        
+                        char *payload = NULL;
+                        payload_length += (nCols*5);
+                        payload = (char*) malloc(sizeof(char)* (payload_length));
+                        memset(payload, '\0', (payload_length));
 
-            if(payload != NULL)
-                free(payload);
-            
+                        for(i=0; i<nCols; i++){
+                            strcat(payload, col_values[i]);
+                        }
+                        load_send_message.length = payload_length;
 
+                        //cs165_log(stdout, payload);
+                        printf("payload_length:%zu\n", payload_length);
+                        if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
+                            log_err("Failed to send message header.");
+                            exit(1);
+                        }
+
+                        // Send the payload (query) to server
+                        if (send(client_socket, payload, load_send_message.length, 0) == -1) {
+                            log_err("Failed to send query payload.");
+                            exit(1);
+                        }
+                        
+                        // Always wait for server response (even if it is just an OK message)
+                        if ((len = recv(client_socket, &(load_recv_message), sizeof(message), 0)) > 0) {
+                            printf("Length Received:%d\n", len);
+                            if (load_recv_message.status == OK_WAIT_FOR_RESPONSE &&
+                                (int) load_recv_message.length > 0) {
+                                printf("Message Received with length:%d\n", (int) load_recv_message.length);
+                                // Calculate number of bytes in response package
+                                int num_bytes = (int) load_recv_message.length;
+                                char payloadRecv[num_bytes + 1];
+
+                                // Receive the payload and print it out
+                                if ((len = recv(client_socket, payloadRecv, num_bytes, 0)) > 0) {
+                                    payloadRecv[num_bytes] = '\0';
+                                    printf("%s\n", payloadRecv);
+
+                                    string_curr_length = 0;
+
+                                    for(i=0; i<nCols; i++){
+                                        memset(col_values[i], '\0', col_val_capacity);
+                                        strcpy(col_values[i], "load(");
+                                        strcat(col_values[i], col_names[i]);
+                                        strcat(col_values[i], ",");
+                                    }
+                                }
+                                else{
+                                    printf("Message payload is zero bytes");
+                                }
+                            }
+                            else{
+                                printf("Length Received But Message Length:%d\n", (int) load_recv_message.length);
+                            }
+                        }
+                        else {
+                            if(payload != NULL)
+                                free(payload);
+                            if (len < 0) {
+                                log_err("Failed to receive message.");
+                            }
+                            else {
+                                log_info("Server closed connection\n");
+                            }
+                            exit(1);
+                        }
+
+                        if(payload != NULL)
+                            free(payload);
+                        
+                    }
+                    //cs165_log(stdout, "%s \n", col_values[0]);
+                    //cs165_log(stdout, "len: %zu \n", string_curr_length);
+                }
+                if(string_curr_length > 0){
+                    size_t payload_length = 0;
+                    for(i=0; i<nCols; i++){
+                        size_t len = strlen(col_values[i]);
+                        int last_char = len - 1;
+                        //col_values[i][last_char] = '\0';
+                        if(i == nCols-1)
+                        {
+                            col_values[i][last_char] = ')';
+                            col_values[i][last_char+1] = '\n';
+                            col_values[i][last_char+2] = '\0';
+                        }
+                        else
+                        {
+                            col_values[i][last_char] = ')';
+                            col_values[i][last_char+1] = ',';
+                            col_values[i][last_char+2] = '\0';
+                        }
+                        payload_length += (len+2);
+                    }
+    
+                    char *payload = NULL;
+                    payload_length += (nCols*5);
+                    payload = (char*) malloc(sizeof(char)* (payload_length));
+                    memset(payload, '\0', (payload_length));
+
+                    for(i=0; i<nCols; i++){
+                        strcat(payload, col_values[i]);
+                    }
+                    load_send_message.length = payload_length;
+
+                    //cs165_log(stdout, payload);
+                    printf("payload_length:%zu\n", payload_length);
+                    if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
+                        log_err("Failed to send message header.");
+                        exit(1);
+                    }
+
+                    // Send the payload (query) to server
+                    if (send(client_socket, payload, load_send_message.length, 0) == -1) {
+                        log_err("Failed to send query payload.");
+                        exit(1);
+                    }
+                    
+                    // Always wait for server response (even if it is just an OK message)
+                    if ((len = recv(client_socket, &(load_recv_message), sizeof(message), 0)) > 0) {
+                        printf("Length Received:%d\n", len);
+                        if (load_recv_message.status == OK_WAIT_FOR_RESPONSE &&
+                            (int) load_recv_message.length > 0) {
+                            printf("Message Received with length:%d\n", (int) load_recv_message.length);
+                            // Calculate number of bytes in response package
+                            int num_bytes = (int) load_recv_message.length;
+                            char payloadRecv[num_bytes + 1];
+
+                            // Receive the payload and print it out
+                            if ((len = recv(client_socket, payloadRecv, num_bytes, 0)) > 0) {
+                                payloadRecv[num_bytes] = '\0';
+                                printf("%s\n", payloadRecv);
+
+                                string_curr_length = 0;
+
+                                for(i=0; i<nCols; i++){
+                                    memset(col_values[i], '\0', col_val_capacity);
+                                    strcpy(col_values[i], "load(");
+                                    strcat(col_values[i], col_names[i]);
+                                    strcat(col_values[i], ",");
+                                }
+                            }
+                            else{
+                                printf("Message payload is zero bytes");
+                            }
+                        }
+                        else{
+                            printf("Length Received But Message Length:%d\n", (int) load_recv_message.length);
+                        }
+                    }
+                    else {
+                        if(payload != NULL)
+                            free(payload);
+                        if (len < 0) {
+                            log_err("Failed to receive message.");
+                        }
+                        else {
+                            log_info("Server closed connection\n");
+                        }
+                        exit(1);
+                    }
+
+                    if(payload != NULL)
+                        free(payload);
+                }
+            }
             for(i=0; i<nCols; i++){
                 free(col_names[i]); free(col_values[i]);
             }
             free(col_names); free(col_values);
+           
+            //Form the queries
+
+            
             fclose(fd);
         }
         else{
