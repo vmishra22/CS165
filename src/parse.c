@@ -344,7 +344,8 @@ DbOperator* parse_load(char* query_command, message* send_message) {
             return NULL;
         } 
 
-        DbOperator* dbo = malloc(sizeof(DbOperator));
+        DbOperator* dbo = NULL;
+        dbo = malloc(sizeof(DbOperator));
         dbo->type = CREATE_IDX;
         dbo->operator_fields.create_idx_operator.table = table;
         dbo->operator_fields.create_idx_operator.column = column;

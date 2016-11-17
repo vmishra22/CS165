@@ -223,7 +223,7 @@ static Result* computeResultIndices(Table* table, Column* column, Comparator* co
 		if(pIndex != NULL){
 			if(pIndex->clustered){
 				if(pIndex->indexType == BTREE){
-					node* root = pIndex->dataIndex;
+					treeRoot* root = pIndex->dataIndex;
 					int retDataIndexLow = find_lower_index_clustered(root, comparator->p_low);
 					int retDataIndexHigh = find_higher_index_clustered(root, comparator->p_high);
 					if(retDataIndexLow != -1 && retDataIndexHigh != -1){
@@ -242,7 +242,7 @@ static Result* computeResultIndices(Table* table, Column* column, Comparator* co
 				}
 			}else if(pIndex->unclustered){
 				if(pIndex->indexType == BTREE){
-					node* root = pIndex->dataIndex;
+					treeRoot* root = pIndex->dataIndex;
 					j = find_result_indices_scan_unclustered_select(root, comparator->p_low, comparator->p_high, resultIndices);
 				}else{
 					int retDataIndexLow = BinarySearchGreaterThanOrEqual(table, column, comparator);
@@ -519,9 +519,16 @@ void createTreeClusteredColumnIndex(Table* table, Column* column){
 	size_t columnSize = table->table_length;
 	ColumnIndex* pIndex = column->index;
 	int* baseData = column->data;
-	node* root = NULL;
+	treeRoot* root = NULL;
+	if(pIndex->dataIndex == NULL)
+	{
+		root = (treeRoot*)malloc(sizeof(treeRoot));
+		memset(root, 0, sizeof(treeRoot));
+	}
+	else 
+		root = pIndex->dataIndex;
 	for(i=0; i<columnSize; i++){
-		root = insert_in_tree(root, baseData[i], i);
+		root = insert_in_treeN(root, baseData[i], i);
 	}
 	pIndex->dataIndex = root;
 	if(columnSize >= pIndex->index_data_capacity){
@@ -546,18 +553,25 @@ void createTreeColumnUnClusteredIndex(Table* table, Column* column){
 
 	ColumnIndex* pIndex = column->index;
 	dataRecord* colTuplesArr = pIndex->tuples;
-
-	node* root = NULL;
+	treeRoot* root = NULL;
+	if(pIndex->dataIndex == NULL)
+	{
+		root = (treeRoot*)malloc(sizeof(treeRoot));
+		memset(root, 0, sizeof(treeRoot));
+	}
+	else 
+		root = pIndex->dataIndex;
 	for(i=0; i<columnSize; i++){
 		dataRecord* lColTuple = &(colTuplesArr[i]);
 		int basePos = lColTuple->pos;
 		int value = lColTuple->val;
-		root = insert_in_tree(root, value, basePos);
+		root = insert_in_treeN(root, value, basePos);
 	}
 	pIndex->dataIndex = root;
 	if(columnSize >= pIndex->index_data_capacity){
 		pIndex->index_data_capacity = columnSize + 1;
-		pIndex->tuples = (dataRecord*)realloc(pIndex->tuples, (pIndex->index_data_capacity) * sizeof(dataRecord));
+		dataRecord* tempTuples = (dataRecord*)realloc(pIndex->tuples, (pIndex->index_data_capacity) * sizeof(dataRecord));
+		pIndex->tuples = tempTuples;
 	}
 }
 
@@ -773,7 +787,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	int* data = column->data;
 
         	//divide the data into page sizes
-        	//Each operator gets 4KB for result
+        	//Each operator gets 5% of the page size for result
         	size_t system_page_size = sysconf(_SC_PAGESIZE);
         	size_t page_size = system_page_size - (numOperators*system_page_size*0.05);
         	size_t num_pages = (columnSize<<2)/page_size;

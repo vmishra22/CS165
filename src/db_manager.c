@@ -226,7 +226,7 @@ Status db_startup(){
 	            }
 	            else if(strcmp(catalog.columnIndexType[i][j], "BTREE") == 0){
 	            	pIndex->indexType = BTREE;
-	            	node* root = NULL;
+	            	treeRoot* root = NULL;
 	            	root = read_tree_from_file(ptr_index);
 	            	pIndex->dataIndex = root;
 	            }
@@ -375,7 +375,7 @@ Status shutdown_server(){
 				if(index->tuples != NULL)
 					free(index->tuples);
 				if(index->indexType == BTREE){
-					node* root = index->dataIndex;
+					treeRoot* root = index->dataIndex;
 					if(root != NULL)
 						destroy_tree(root);
 				}
