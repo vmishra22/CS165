@@ -575,14 +575,32 @@ void createTreeColumnUnClusteredIndex(Table* table, Column* column){
 	}
 }
 
-void create_unclustered_index(Table* table){
+void create_unclustered_index(Table* table, bool isAnyClusteredIndex){
 	size_t idx = 0;
 	size_t numColumns = table->col_count;
+	size_t columnSize = table->table_length;
 	//Create unclustered index
 	while(idx < numColumns){
 		Column* chcolumn = &(table->columns[idx]);
 		ColumnIndex* pchIndex = chcolumn->index;
 	    if(pchIndex != NULL && pchIndex->unclustered){
+	    	//Fill the data tuples for table with only unclustered index
+	    	if(!isAnyClusteredIndex){
+		    	if(columnSize > pchIndex->index_data_capacity){
+					pchIndex->index_data_capacity = columnSize + 1;
+	        		dataRecord* tempTuples =(dataRecord*) realloc(pchIndex->tuples,
+	        								(pchIndex->index_data_capacity)*sizeof(dataRecord));
+	        		pchIndex->tuples = tempTuples;
+	        	}
+				int* baseData = chcolumn->data;
+				size_t k=0;
+				for(k=0; k<columnSize; k++){
+					dataRecord* tColTuple = &(pchIndex->tuples[k]);
+					tColTuple->pos = k;
+					tColTuple->val = baseData[k];
+				}
+			}
+
 	    	if(pchIndex->indexType == SORTED){
 				createSortColumnUnClusteredIndex(table, chcolumn);
 			}
@@ -599,11 +617,13 @@ void form_column_index(Table* table){
 	size_t numColumns = table->col_count;
 	size_t columnSize = table->table_length;
 	size_t colNumFirstClust = -1;
+	bool isAnyClusteredIndex = false;
 
 	for(col_Idx = 0; col_Idx<numColumns; col_Idx++){
 		Column* column = &(table->columns[col_Idx]);
 		ColumnIndex* pIndex = column->index;
 	    if(pIndex != NULL && pIndex->clustered){
+	    	isAnyClusteredIndex = true;
 			if(strcmp(table->firstDeclaredClustCol, column->name) == 0){
 				colNumFirstClust = col_Idx;
 			}
@@ -660,7 +680,7 @@ void form_column_index(Table* table){
 		}
 	}
 
-	create_unclustered_index(table);
+	create_unclustered_index(table, isAnyClusteredIndex);
 	
 }
 

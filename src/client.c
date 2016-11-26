@@ -89,6 +89,7 @@ void parse_load_query(char* loadQuery, int client_socket){
         size_t unit_size = 1<<12;
         size_t num_chunks = 0;
         num_chunks = actual_size / unit_size;
+        size_t current_chunk = 0;
         //size_t last_chunk_size = actual_size % unit_size;   
 
         if(fd != NULL){
@@ -167,17 +168,20 @@ void parse_load_query(char* loadQuery, int client_socket){
                 }
                 
                 char *payload = NULL;
-                payload_length += (nCols*5);
+                payload_length += ((nCols*5)+ 20);
                 payload = (char*) malloc(sizeof(char)* (payload_length));
                 memset(payload, '\0', (payload_length));
 
+                char* chunkNumPayload = (char*)malloc(sizeof(char)*20);
+                strcpy(chunkNumPayload, ",NC(END)");
                 for(i=0; i<nCols; i++){
                     strcat(payload, col_values[i]);
                 }
+                strcat(payload, chunkNumPayload);
                 load_send_message.length = payload_length;
 
                 //cs165_log(stdout, payload);
-
+                current_chunk++;
                 if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
                     log_err("Failed to send message header.");
                     exit(1);
@@ -236,7 +240,7 @@ void parse_load_query(char* loadQuery, int client_socket){
                         j++;
                     }
                     memset(buf, '\0', 1024);
-                    if(string_curr_length >= (0.75 * unit_size)){
+                    if(string_curr_length >= unit_size){
                         size_t payload_length = 0;
                         for(i=0; i<nCols; i++){
                             size_t len = strlen(col_values[i]);
@@ -265,6 +269,7 @@ void parse_load_query(char* loadQuery, int client_socket){
                         for(i=0; i<nCols; i++){
                             strcat(payload, col_values[i]);
                         }
+
                         load_send_message.length = payload_length;
 
                         //cs165_log(stdout, payload);
@@ -353,15 +358,19 @@ void parse_load_query(char* loadQuery, int client_socket){
                     }
     
                     char *payload = NULL;
-                    payload_length += (nCols*5);
+                    payload_length += ((nCols*5)+20);
                     payload = (char*) malloc(sizeof(char)* (payload_length));
                     memset(payload, '\0', (payload_length));
 
+                    char* chunkNumPayload = (char*)malloc(sizeof(char)*20);
+                    strcpy(chunkNumPayload, ",NC(END)");
                     for(i=0; i<nCols; i++){
                         strcat(payload, col_values[i]);
                     }
+                    strcat(payload, chunkNumPayload);
                     load_send_message.length = payload_length;
 
+                    current_chunk++;
                     //cs165_log(stdout, payload);
                     //printf("payload_length:%zu\n", payload_length);
                     if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {

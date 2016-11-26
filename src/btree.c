@@ -742,8 +742,8 @@ treeRoot* insert_in_treeN(treeRoot* root, int key, int pos ) {
 		return NULL;
 
 	//No duplicates for now in the tree. 
-	if(findN(root, key) != -1)
-		return root;
+	// if(findN(root, key) != -1)
+	// 	return root;
 
 	//Create a new tree for the first time. 
 	if (root->iNode == NULL && root->lNode == NULL) 

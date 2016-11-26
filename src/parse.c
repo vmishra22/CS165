@@ -299,6 +299,7 @@ DbOperator* parse_load(char* query_command, message* send_message) {
         dataSize = table->table_length;
 
         //printf("Column Name:%s\n", col_name);
+        bool loadCompleted = false;
 
         while ((token = strsep(command_index, ",")) != NULL) {
             if(strncmp(token, "load", 4) == 0){
@@ -317,7 +318,10 @@ DbOperator* parse_load(char* query_command, message* send_message) {
                         break;
                     }
                 }
-            }else{
+            }else if(strncmp(token, "NC", 2) == 0){
+                loadCompleted = true;
+            }
+            else{
 
                 int load_val = atoi(token);
                 
@@ -345,10 +349,12 @@ DbOperator* parse_load(char* query_command, message* send_message) {
         } 
 
         DbOperator* dbo = NULL;
-        dbo = malloc(sizeof(DbOperator));
-        dbo->type = CREATE_IDX;
-        dbo->operator_fields.create_idx_operator.table = table;
-        dbo->operator_fields.create_idx_operator.column = column;
+        if(loadCompleted){
+            dbo = malloc(sizeof(DbOperator));
+            dbo->type = CREATE_IDX;
+            dbo->operator_fields.create_idx_operator.table = table;
+            dbo->operator_fields.create_idx_operator.column = column;
+        }
         
         send_message->status = OK_WAIT_FOR_RESPONSE;
         return dbo;
