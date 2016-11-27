@@ -735,11 +735,17 @@ void computeJoinPositions(Result* pResultOuter, Result* pResultInner, int* posOu
 
 	int* pPayloadOuter = (int*)(pResultOuter->payload);
 	int* pPayloadInner = (int*)(pResultInner->payload);
-	size_t i=0, j=0, r=0, m=0, k=0;
+	size_t i=0, j=0, r=0, m=0, k=0, lim1 = 0, lim2 = 0;
 	for (i=0;i<num_tuples_Outer;i=i+page_size){
 		for (j=0;j<num_tuples_Inner;j=j+page_size){
-			for (r=i;r<i+page_size;r++){
-				for (m=j;m<j+page_size;m++){
+			if( ((int)(i+page_size) - (int)num_tuples_Outer) >= 0 ) lim1 = num_tuples_Outer;
+			else lim1 = i+page_size;
+
+			if( ((int)(j+page_size) - (int)num_tuples_Inner) >= 0 ) lim2 = num_tuples_Inner;
+			else lim2 = j+page_size;
+
+			for (r=i;r<lim1;r++){
+				for (m=j;m<lim2;m++){
 					if (pPayloadOuter[r]==pPayloadInner[m]){
 						posOuter[k]=r;
 						posInner[k++]=m;
@@ -912,13 +918,13 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	Result* pResult0 = pGenColumn[0].column_pointer.result; //first fetch
         	Result* pResult2 = pGenColumn[2].column_pointer.result; //second fetch
 
-        	Result* pResult1 = pGenColumn[0].column_pointer.result; //first select
-        	Result* pResult3 = pGenColumn[2].column_pointer.result; //second select
+        	Result* pResult1 = pGenColumn[1].column_pointer.result; //first select
+        	Result* pResult3 = pGenColumn[3].column_pointer.result; //second select
 
         	size_t num_tuples0 = pResult0->num_tuples;
         	size_t num_tuples2 = pResult2->num_tuples;
         	size_t num_positions = 0;
-        	if(strcpy(join_method, "nested-loop") == 0){
+        	if(strcmp(join_method, "nested-loop") == 0){
 	        	int* pos0 = NULL, *pos2 = NULL;
 	        	if(num_tuples0 >= num_tuples2){
 	        		pos0 = (int*)malloc(sizeof(int)*num_tuples2);
@@ -1051,11 +1057,13 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         			int k = 0;
         			if(pIndex != NULL){
         				dataRecord* colTuplesArr = pIndex->tuples;
-        				if(pResult->lower_idx != -1 && pResult->upper_idx != -1){
-	        				size_t dataIndexLow = pResult->lower_idx;
-							size_t dataIndexHigh = pResult->upper_idx;
-							for(i=dataIndexLow; i<=dataIndexHigh; i++){
-								resultColValues[k++] = (colTuplesArr[i]).val;
+        				if((pResult->upper_idx - pResult->lower_idx) == (int)pResult->num_tuples){
+	        				if(pResult->lower_idx != -1 && pResult->upper_idx != -1){
+		        				size_t dataIndexLow = pResult->lower_idx;
+								size_t dataIndexHigh = pResult->upper_idx;
+								for(i=dataIndexLow; i<=dataIndexHigh; i++){
+									resultColValues[k++] = (colTuplesArr[i]).val;
+								}
 							}
 						}else{
 							qsort(pPayload, pResult->num_tuples, sizeof(int), cmppos);
