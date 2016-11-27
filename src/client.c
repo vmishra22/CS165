@@ -89,7 +89,6 @@ void parse_load_query(char* loadQuery, int client_socket){
         size_t unit_size = 1<<12;
         size_t num_chunks = 0;
         num_chunks = actual_size / unit_size;
-        size_t current_chunk = 0;
         //size_t last_chunk_size = actual_size % unit_size;   
 
         if(fd != NULL){
@@ -181,7 +180,6 @@ void parse_load_query(char* loadQuery, int client_socket){
                 load_send_message.length = payload_length;
 
                 //cs165_log(stdout, payload);
-                current_chunk++;
                 if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {
                     log_err("Failed to send message header.");
                     exit(1);
@@ -370,7 +368,6 @@ void parse_load_query(char* loadQuery, int client_socket){
                     strcat(payload, chunkNumPayload);
                     load_send_message.length = payload_length;
 
-                    current_chunk++;
                     //cs165_log(stdout, payload);
                     //printf("payload_length:%zu\n", payload_length);
                     if (send(client_socket, &(load_send_message), sizeof(message), 0) == -1) {

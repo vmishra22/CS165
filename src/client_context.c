@@ -187,6 +187,11 @@ static Result* computeResultIndices(Table* table, Column* column, Comparator* co
 				}else{
 
 				}
+			}else{
+				for (i=0; i<columnSize; i++){
+					if(column->data[i] < comparator->p_high)
+						resultIndices[j++]=i;
+				}
 			}
 		}else{
 			for (i=0; i<columnSize; i++){
@@ -723,6 +728,30 @@ void shared_scan(void* threadScanData){
 	pResult->num_tuples = j;
 }
 
+void computeJoinPositions(Result* pResultOuter, Result* pResultInner, int* posOuter, int* posInner, size_t* num_positions){
+	size_t page_size = sysconf(_SC_PAGESIZE);
+	size_t num_tuples_Outer = pResultOuter->num_tuples;
+	size_t num_tuples_Inner = pResultInner->num_tuples;
+
+	int* pPayloadOuter = (int*)(pResultOuter->payload);
+	int* pPayloadInner = (int*)(pResultInner->payload);
+	size_t i=0, j=0, r=0, m=0, k=0;
+	for (i=0;i<num_tuples_Outer;i=i+page_size){
+		for (j=0;j<num_tuples_Inner;j=j+page_size){
+			for (r=i;r<i+page_size;r++){
+				for (m=j;m<j+page_size;m++){
+					if (pPayloadOuter[r]==pPayloadInner[m]){
+						posOuter[k]=r;
+						posInner[k++]=m;
+					}
+				}
+			}
+		}
+	}
+	if(k>0)
+		*num_positions = k;
+}
+
 /** execute_DbOperator takes as input the DbOperator and executes the query.
  **/
 void execute_DbOperator(DbOperator* query, char** msg) {
@@ -869,6 +898,81 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	}
         	
         
+        	break;
+        }
+        case JOIN:
+        {
+        	GeneralizedColumn* pGenColumn = query->operator_fields.join_operator.gen_col;
+        	char outHandle[2][10];
+        	strcpy(outHandle[0], query->operator_fields.join_operator.outhandle1);
+        	strcpy(outHandle[1], query->operator_fields.join_operator.outhandle2);
+        	char* join_method = query->operator_fields.join_operator.joinMethod;
+
+        	//check which relation is outer (the bigger in tuples size)
+        	Result* pResult0 = pGenColumn[0].column_pointer.result; //first fetch
+        	Result* pResult2 = pGenColumn[2].column_pointer.result; //second fetch
+
+        	Result* pResult1 = pGenColumn[0].column_pointer.result; //first select
+        	Result* pResult3 = pGenColumn[2].column_pointer.result; //second select
+
+        	size_t num_tuples0 = pResult0->num_tuples;
+        	size_t num_tuples2 = pResult2->num_tuples;
+        	size_t num_positions = 0;
+        	if(strcpy(join_method, "nested-loop") == 0){
+	        	int* pos0 = NULL, *pos2 = NULL;
+	        	if(num_tuples0 >= num_tuples2){
+	        		pos0 = (int*)malloc(sizeof(int)*num_tuples2);
+	        		pos2 = (int*)malloc(sizeof(int)*num_tuples2);
+	        		computeJoinPositions(pResult0, pResult2, pos0, pos2, &num_positions);
+	        	}else{
+	        		pos0 = (int*)malloc(sizeof(int)*num_tuples0);
+	        		pos2 = (int*)malloc(sizeof(int)*num_tuples0);
+	        		computeJoinPositions(pResult2, pResult0, pos2, pos0, &num_positions);
+	        	}
+	        	if(num_positions > 0){
+	        		int* firstIndices = (int*) malloc(sizeof(int)*num_positions);
+	        		int* secondIndices = (int*) malloc(sizeof(int)*num_positions);
+
+	        		int* select1Pos = (int*)(pResult1->payload);
+	        		int* select2Pos = (int*)(pResult3->payload);
+	        		for(i=0; i<num_positions; i++){
+	        			firstIndices[i] = select1Pos[pos0[i]];
+	        			secondIndices[i] = select2Pos[pos2[i]];
+	        		}
+
+	        		for(i=0; i<2; i++){
+	        			GeneralizedColumnHandle* pGenHandleNew = NULL;
+		        		pGenHandleNew = check_for_existing_handle(context, outHandle[i]);
+		        		if(pGenHandleNew != NULL){
+		        			if(pGenHandleNew->generalized_column.column_pointer.result != NULL)
+				            {
+				                if((pGenHandleNew->generalized_column.column_pointer.result)->payload != NULL)
+				                    free((pGenHandleNew->generalized_column.column_pointer.result)->payload);
+				                free(pGenHandleNew->generalized_column.column_pointer.result);
+				            }
+		        		}
+		        		else{
+		        			pGenHandleNew = &(context->chandle_table[context->chandles_in_use]);
+		        			context->chandles_in_use++;
+		        			strcpy(pGenHandleNew->name, outHandle[i]);
+		        			pGenHandleNew->generalized_column.column_type = RESULT;
+		        		}
+
+						Result* pResultNew = (Result*)malloc(sizeof(Result));
+						memset(pResultNew, 0, sizeof(Result));
+						if(i==0)
+							pResultNew->payload = (void*)firstIndices;
+						else
+							pResultNew->payload = (void*)secondIndices;
+						pResultNew->num_tuples = num_positions;
+						pResultNew->data_type = INT;
+		        		pGenHandleNew->generalized_column.column_pointer.result = pResultNew;
+	        		}
+	        	}
+	        	if(pos0 != NULL) free(pos0);
+	        	if(pos2 != NULL) free(pos2);
+	        	if(pGenColumn != NULL) free(pGenColumn);
+        	}
         	break;
         }
         case SELECT:

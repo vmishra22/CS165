@@ -214,7 +214,8 @@ typedef enum OperatorType {
     PRINT, 
     AVG_SUM,
     ADD_SUB,
-    MAX_MIN
+    MAX_MIN,
+    JOIN
 } OperatorType;
 /*
  * necessary fields for insertion
@@ -289,6 +290,15 @@ typedef struct MaxMinOperator {
     size_t num_data;
     bool isMax;
 } MaxMinOperator;
+
+/*Join Operator */
+typedef struct JoinOperator {
+    GeneralizedColumn* gen_col;
+    char outhandle1[10];
+    char outhandle2[10];
+    char joinMethod[20];
+} JoinOperator;
+
 /*
  * union type holding the fields of any operator
  */
@@ -302,6 +312,7 @@ typedef union OperatorFields {
     AvgSumOperator avg_sum_operator;
     AddSubOperator add_sub_operator;
     MaxMinOperator max_min_operator;
+    JoinOperator join_operator;
 } OperatorFields;
 
 /*

@@ -424,7 +424,8 @@ static GeneralizedColumn* get_generic_result_column(char* handleName, ClientCont
     for(j=0; j<numCHandles; j++){
         pGenHandle = &(context->chandle_table[j]);
         if(strcmp(pGenHandle->name, handleName) == 0 && 
-            (pGenHandle->generalized_column.column_type == RESULT)){
+          (pGenHandle->generalized_column.column_type == RESULT))
+        {
             Result* pResult = pGenHandle->generalized_column.column_pointer.result;
             pGenericColumn = malloc(sizeof(GeneralizedColumn));
             pGenericColumn->column_type = RESULT;
@@ -666,9 +667,71 @@ DbOperator* parse_print(char* query_command, message* send_message){
     return NULL;
 }
 
+void copyResultGenericColumn(GeneralizedColumn* srcGenColumn, GeneralizedColumn* dstGenColumn)
+{
+    dstGenColumn->column_type = srcGenColumn->column_type;
+    dstGenColumn->column_pointer.result = srcGenColumn->column_pointer.result;
+}
+
+void copyTblColGenericColumn(GeneralizedColumn* srcGenColumn, GeneralizedColumn* dstGenColumn)
+{
+    dstGenColumn->column_type = srcGenColumn->column_type;
+    dstGenColumn->column_pointer.column = srcGenColumn->column_pointer.column;
+}
+
 /**
- * parse_fetch
+ * parse_join
  **/
+
+DbOperator* parse_join(char* query_command, char* handle, ClientContext* context, message* send_message) {
+    if (strncmp(query_command, "(", 1) == 0) {
+        query_command++;
+        char* outHandle1 = strsep(&handle, ",");
+        char* outhandle2 = handle;
+
+        char** command_index = &query_command;
+        char** handle_names = (char**) malloc(sizeof(char*)*4);
+        size_t numGenericColumns = 4, nData = 0;
+        size_t i=0;
+        for(i=0; i<numGenericColumns; i++){
+            handle_names[i] = strsep(command_index, ","); 
+        }
+        char* joinMethod = strsep(command_index, ","); 
+        int last_char = strlen(joinMethod) - 1;
+        if (joinMethod[last_char] != ')') {
+            return NULL;
+        }
+        joinMethod[last_char] = '\0';
+
+        GeneralizedColumn* pGenColumn = NULL;
+        pGenColumn = (GeneralizedColumn*)malloc(sizeof(GeneralizedColumn) * numGenericColumns);
+        memset(pGenColumn, 0, sizeof(GeneralizedColumn) * numGenericColumns);
+
+        GeneralizedColumn* tempGenColumn = NULL;
+        for(i=0; i<numGenericColumns; i++){
+            tempGenColumn = get_generic_result_column(handle_names[i], context, &nData);
+            copyResultGenericColumn(tempGenColumn, &pGenColumn[i]);
+            free(tempGenColumn); tempGenColumn = NULL;
+        }
+        free(handle_names);
+
+        DbOperator* dbo = malloc(sizeof(DbOperator));
+        dbo = malloc(sizeof(DbOperator));
+        dbo->type = JOIN;
+        dbo->operator_fields.join_operator.gen_col = pGenColumn;
+        strcpy(dbo->operator_fields.join_operator.outhandle1, outHandle1);
+        strcpy(dbo->operator_fields.join_operator.outhandle2, outhandle2);
+        strcpy(dbo->operator_fields.join_operator.joinMethod, joinMethod);
+
+        send_message->status = OK_WAIT_FOR_RESPONSE;
+        return dbo;
+    }else {
+        send_message->status = UNKNOWN_COMMAND;
+        return NULL;
+    }
+
+    return NULL;
+}
 
 DbOperator* parse_fetch(char* query_command, char* handle, message* send_message) {
     if (strncmp(query_command, "(", 1) == 0) {
@@ -719,17 +782,7 @@ DbOperator* parse_fetch(char* query_command, char* handle, message* send_message
 
     return NULL;
 }
-void copyResultGenericColumn(GeneralizedColumn* srcGenColumn, GeneralizedColumn* dstGenColumn)
-{
-    dstGenColumn->column_type = srcGenColumn->column_type;
-    dstGenColumn->column_pointer.result = srcGenColumn->column_pointer.result;
-}
 
-void copyTblColGenericColumn(GeneralizedColumn* srcGenColumn, GeneralizedColumn* dstGenColumn)
-{
-    dstGenColumn->column_type = srcGenColumn->column_type;
-    dstGenColumn->column_pointer.column = srcGenColumn->column_pointer.column;
-}
 /**
  * parse_select 
  **/
@@ -914,6 +967,10 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
     }else if(strncmp(query_command, "fetch", 5) == 0){
         query_command += 5;
         dbo = parse_fetch(query_command, handle, send_message);
+
+    }else if(strncmp(query_command, "join", 4) == 0){
+        query_command += 4;
+        dbo = parse_join(query_command, handle, context, send_message);
 
     }else if(strncmp(query_command, "print", 5) == 0){
         query_command += 5;
