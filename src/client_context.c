@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include "utils.h"
 #include "thpool.h"
-
+#include "hash_table.h"
 
 
 Table* lookup_table(char *name) {
@@ -728,7 +728,48 @@ void shared_scan(void* threadScanData){
 	pResult->num_tuples = j;
 }
 
-void computeJoinPositions(Result* pResultOuter, Result* pResultInner, int* posOuter, int* posInner, size_t* num_positions){
+void computeHashJoinPositions(Result* pResultOuterVal, Result* pResultOuterPos,
+							  Result* pResultInnerVal, Result* pResultInnerPos, 
+							  int* posOuter, int* posInner, size_t* num_positions){
+	size_t num_tuples_Outer = pResultOuterVal->num_tuples;
+	size_t num_tuples_Inner = pResultInnerVal->num_tuples;
+
+	int* pPayloadOuterVal = (int*)(pResultOuterVal->payload);
+	int* pPayloadInnerVal = (int*)(pResultInnerVal->payload);
+
+	int* pPayloadOuterPos = (int*)(pResultOuterPos->payload);
+	int* pPayloadInnerPos = (int*)(pResultInnerPos->payload);
+
+	size_t i=0, j=0, r=0, k=0;
+	size_t cache_size = 24*1024/sizeof(int);  //32K-(2*4K) (L1-2 size)
+	hashtable* ht = NULL;
+	init(&ht, TABLE_SIZE);
+	for (i=0;i<num_tuples_Inner;i++, k++){
+		put(&ht, pPayloadInnerVal[i], pPayloadInnerPos[i]);
+		if(k == cache_size/2 || (i == (num_tuples_Inner -1))){
+			k = 0;
+			for(j=0; j<num_tuples_Outer; j++){
+				int num_values = 1;
+				valType* values = malloc(1 * sizeof(valType));
+				int num_results = get(ht, pPayloadOuterVal[j], values, num_values);
+				if (num_results > 0) {
+					posOuter[r] = pPayloadOuterPos[j];
+					posInner[r++] = values[0];
+				}
+				free(values);
+			}
+			destroy_hash_table(ht); ht = NULL;
+			init(&ht, TABLE_SIZE);
+		}
+	}
+	if(ht != NULL){
+		destroy_hash_table(ht); ht = NULL;
+	}
+	if(r>0)
+		*num_positions = r;
+}
+
+void computeNestedLoopJoinPositions(Result* pResultOuter, Result* pResultInner, int* posOuter, int* posInner, size_t* num_positions){
 	size_t page_size = sysconf(_SC_PAGESIZE);
 	size_t num_tuples_Outer = pResultOuter->num_tuples;
 	size_t num_tuples_Inner = pResultInner->num_tuples;
@@ -924,61 +965,78 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	size_t num_tuples0 = pResult0->num_tuples;
         	size_t num_tuples2 = pResult2->num_tuples;
         	size_t num_positions = 0;
+        	int* pos0 = NULL, *pos2 = NULL;
         	if(strcmp(join_method, "nested-loop") == 0){
-	        	int* pos0 = NULL, *pos2 = NULL;
 	        	if(num_tuples0 >= num_tuples2){
 	        		pos0 = (int*)malloc(sizeof(int)*num_tuples2);
 	        		pos2 = (int*)malloc(sizeof(int)*num_tuples2);
-	        		computeJoinPositions(pResult0, pResult2, pos0, pos2, &num_positions);
+	        		computeNestedLoopJoinPositions(pResult0, pResult2, pos0, pos2, &num_positions);
 	        	}else{
 	        		pos0 = (int*)malloc(sizeof(int)*num_tuples0);
 	        		pos2 = (int*)malloc(sizeof(int)*num_tuples0);
-	        		computeJoinPositions(pResult2, pResult0, pos2, pos0, &num_positions);
+	        		computeNestedLoopJoinPositions(pResult2, pResult0, pos2, pos0, &num_positions);
 	        	}
-	        	if(num_positions > 0){
-	        		int* firstIndices = (int*) malloc(sizeof(int)*num_positions);
-	        		int* secondIndices = (int*) malloc(sizeof(int)*num_positions);
+	        }else if(strcmp(join_method, "hash") == 0){
+	        	if(num_tuples0 >= num_tuples2){
+	        		pos0 = (int*)malloc(sizeof(int)*num_tuples2);
+	        		pos2 = (int*)malloc(sizeof(int)*num_tuples2);
+	        		computeHashJoinPositions(pResult0, pResult1, pResult2, pResult3, pos0, pos2, &num_positions);
+	        	}else{
+	        		pos0 = (int*)malloc(sizeof(int)*num_tuples0);
+	        		pos2 = (int*)malloc(sizeof(int)*num_tuples0);
+	        		computeHashJoinPositions(pResult2, pResult3, pResult0, pResult1, pos2, pos0, &num_positions);
+	        	}
+        	}
+        	if(num_positions > 0){
+        		int* firstIndices = (int*) malloc(sizeof(int)*num_positions);
+        		int* secondIndices = (int*) malloc(sizeof(int)*num_positions);
 
+        		if(strcmp(join_method, "hash") == 0){
+        			memcpy(firstIndices, pos0, sizeof(int)*num_positions);
+        			memcpy(secondIndices, pos2, sizeof(int)*num_positions);
+        		}else{
 	        		int* select1Pos = (int*)(pResult1->payload);
 	        		int* select2Pos = (int*)(pResult3->payload);
 	        		for(i=0; i<num_positions; i++){
 	        			firstIndices[i] = select1Pos[pos0[i]];
 	        			secondIndices[i] = select2Pos[pos2[i]];
 	        		}
+        		}
 
-	        		for(i=0; i<2; i++){
-	        			GeneralizedColumnHandle* pGenHandleNew = NULL;
-		        		pGenHandleNew = check_for_existing_handle(context, outHandle[i]);
-		        		if(pGenHandleNew != NULL){
-		        			if(pGenHandleNew->generalized_column.column_pointer.result != NULL)
-				            {
-				                if((pGenHandleNew->generalized_column.column_pointer.result)->payload != NULL)
-				                    free((pGenHandleNew->generalized_column.column_pointer.result)->payload);
-				                free(pGenHandleNew->generalized_column.column_pointer.result);
-				            }
-		        		}
-		        		else{
-		        			pGenHandleNew = &(context->chandle_table[context->chandles_in_use]);
-		        			context->chandles_in_use++;
-		        			strcpy(pGenHandleNew->name, outHandle[i]);
-		        			pGenHandleNew->generalized_column.column_type = RESULT;
-		        		}
-
-						Result* pResultNew = (Result*)malloc(sizeof(Result));
-						memset(pResultNew, 0, sizeof(Result));
-						if(i==0)
-							pResultNew->payload = (void*)firstIndices;
-						else
-							pResultNew->payload = (void*)secondIndices;
-						pResultNew->num_tuples = num_positions;
-						pResultNew->data_type = INT;
-		        		pGenHandleNew->generalized_column.column_pointer.result = pResultNew;
+        		for(i=0; i<2; i++){
+        			GeneralizedColumnHandle* pGenHandleNew = NULL;
+	        		pGenHandleNew = check_for_existing_handle(context, outHandle[i]);
+	        		if(pGenHandleNew != NULL){
+	        			if(pGenHandleNew->generalized_column.column_pointer.result != NULL)
+			            {
+			                if((pGenHandleNew->generalized_column.column_pointer.result)->payload != NULL)
+			                    free((pGenHandleNew->generalized_column.column_pointer.result)->payload);
+			                free(pGenHandleNew->generalized_column.column_pointer.result);
+			            }
 	        		}
-	        	}
-	        	if(pos0 != NULL) free(pos0);
-	        	if(pos2 != NULL) free(pos2);
-	        	if(pGenColumn != NULL) free(pGenColumn);
+	        		else{
+	        			pGenHandleNew = &(context->chandle_table[context->chandles_in_use]);
+	        			context->chandles_in_use++;
+	        			strcpy(pGenHandleNew->name, outHandle[i]);
+	        			pGenHandleNew->generalized_column.column_type = RESULT;
+	        		}
+
+					Result* pResultNew = (Result*)malloc(sizeof(Result));
+					memset(pResultNew, 0, sizeof(Result));
+					if(i==0)
+						pResultNew->payload = (void*)firstIndices;
+					else
+						pResultNew->payload = (void*)secondIndices;
+					pResultNew->num_tuples = num_positions;
+					pResultNew->data_type = INT;
+	        		pGenHandleNew->generalized_column.column_pointer.result = pResultNew;
+        		}
         	}
+        	if(pos0 != NULL) free(pos0);
+        	if(pos2 != NULL) free(pos2);
+        	if(pGenColumn != NULL) free(pGenColumn);
+        	
+        	
         	break;
         }
         case SELECT:
