@@ -753,8 +753,18 @@ void computeHashJoinPositions(Result* pResultOuterVal, Result* pResultOuterPos,
 				valType* values = malloc(1 * sizeof(valType));
 				int num_results = get(ht, pPayloadOuterVal[j], values, num_values);
 				if (num_results > 0) {
-					posOuter[r] = pPayloadOuterPos[j];
-					posInner[r++] = values[0];
+					if(num_results > num_values){
+						values = realloc(values, num_results * sizeof(valType));
+	    				get(ht, 0, values, num_results);
+	    				int m=0;
+	    				for(m=0; m<num_results; m++){
+	    					posOuter[r] = pPayloadOuterPos[j];
+							posInner[r++] = values[m];
+	    				}
+    				}else{
+						posOuter[r] = pPayloadOuterPos[j];
+						posInner[r++] = values[0];
+					}
 				}
 				free(values);
 			}
