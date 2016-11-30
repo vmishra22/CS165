@@ -80,7 +80,7 @@ message_status parse_create_idx(char* create_arguments) {
                     status = INCORRECT_FORMAT;
 
                 //Initialize the tuples
-                pIndex->index_data_capacity = 200;
+                pIndex->index_data_capacity = 1000;
                 pIndex->tuples = (dataRecord*)malloc(sizeof(dataRecord) * (pIndex->index_data_capacity));
                 memset(pIndex->tuples, 0, sizeof(dataRecord)*(pIndex->index_data_capacity));
 

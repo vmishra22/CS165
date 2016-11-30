@@ -617,6 +617,101 @@ void create_unclustered_index(Table* table, bool isAnyClusteredIndex){
 	}
 }
 
+void update_column_index(Table* table, int* values){
+	size_t i=0, j=0, k = 0, col_Idx = 0, idx = 0;;
+	size_t numColumns = table->col_count;
+	size_t columnSize = table->table_length;
+	size_t colNumFirstClust = -1;
+
+	for(col_Idx = 0; col_Idx<numColumns; col_Idx++){
+		Column* column = &(table->columns[col_Idx]);
+		ColumnIndex* pIndex = column->index;
+	    if(pIndex != NULL && pIndex->clustered){
+	    	if(strcmp(table->firstDeclaredClustCol, column->name) == 0){
+				colNumFirstClust = col_Idx;
+			}
+
+			if(columnSize >= pIndex->index_data_capacity){
+				for(i=0; i<numColumns; i++){
+					Column* pColumn = &(table->columns[i]);
+					ColumnIndex* pColumnIndex = pColumn->index;
+					pColumnIndex->index_data_capacity = columnSize + 1;
+					dataRecord* tempTuples = (dataRecord*)realloc(pColumnIndex->tuples, 
+											 		(pColumnIndex->index_data_capacity)*sizeof(dataRecord));
+					pColumnIndex->tuples = tempTuples;
+				}
+			}
+
+	    	if(pIndex->indexType == SORTED){
+	    		int* baseSortData = column->data;
+				//copy base data into index data
+
+				//Fill the data in the end of the index tuples
+				dataRecord* colTuple = &(pIndex->tuples[columnSize-1]);
+				if(colTuple == NULL)
+					return;
+				colTuple->pos = columnSize-1;
+				colTuple->val = baseSortData[columnSize-1];
+
+				//Now sort the index data
+				dataRecord** colTuplesArr = &(pIndex->tuples);
+				qsort(*colTuplesArr, columnSize, sizeof(dataRecord), cmprecordval);
+	    	}else if(pIndex->indexType == BTREE){
+				
+			}
+
+			//Propagate the order
+		 	char* leadingColName = table->firstDeclaredClustCol;
+		    if(strlen(leadingColName) > 0){
+		    	Column* leadingCol = &(table->columns[colNumFirstClust]);
+		    	ColumnIndex* leadingColIndex = leadingCol->index;
+		    	for(k=0; k<columnSize; k++){
+					dataRecord* lColTuple = &(leadingColIndex->tuples[k]);
+					size_t basePos = lColTuple->pos;
+					for(j=0; j<numColumns; j++){
+						if(j == colNumFirstClust)
+							continue;
+						Column* tCol = &(table->columns[j]);
+						ColumnIndex* tIndex = tCol->index;
+						if(tIndex->unclustered)
+							continue;
+						int* baseData = tCol->data;
+						dataRecord* tColTuple = &(tIndex->tuples[k]);
+						tColTuple->pos = basePos;
+						tColTuple->val = baseData[basePos];
+					}
+				}
+		    }
+	    }
+	}
+
+	//Now update unclustered index
+	while(idx < numColumns){
+		Column* chcolumn = &(table->columns[idx]);
+		ColumnIndex* pchIndex = chcolumn->index;
+	    if(pchIndex != NULL && pchIndex->unclustered){
+	    	if(pchIndex->indexType == SORTED){
+			}
+			else if(pchIndex->indexType == BTREE){
+				
+				treeRoot* root = NULL;
+				if(pchIndex->dataIndex == NULL)
+				{
+					root = (treeRoot*)malloc(sizeof(treeRoot));
+					memset(root, 0, sizeof(treeRoot));
+				}
+				else 
+					root = pchIndex->dataIndex;
+				int basePos = columnSize-1;
+				int value = values[idx];
+				root = insert_in_treeN(root, value, basePos);
+			}
+	    }
+	    idx++;
+	}
+
+}
+
 void form_column_index(Table* table){
 	size_t i=0, j=0, k = 0, col_Idx = 0;
 	size_t numColumns = table->col_count;
@@ -842,9 +937,12 @@ void execute_DbOperator(DbOperator* query, char** msg) {
             size_t columnSize = table->table_length;
             //check if the column data size need to be modified.
             if(columnSize == table->col_data_capacity){
-            	table->col_data_capacity *= 5; 
+            	table->col_data_capacity *= 2; 
             	for(i=0; i<numColumns; i++){
             		column = &(table->columns[i]);
+            		if(column->data == NULL){
+            			column = retrieve_column_for_scan(table, column->name, true);
+            		}
             		column->data = (int*)realloc(column->data, (table->col_data_capacity) * sizeof(int));
             	}
             }
@@ -856,6 +954,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
             }
             (table->table_length)++;
 
+            update_column_index(table, query->operator_fields.insert_operator.values);
             //form_column_index(table);
 
             char insertMsg[] = "Insert Operation Succeeded";
@@ -1125,7 +1224,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         			int k = 0;
         			if(pIndex != NULL){
         				dataRecord* colTuplesArr = pIndex->tuples;
-        				if((pResult->upper_idx - pResult->lower_idx) == (int)pResult->num_tuples){
+        				if((pResult->upper_idx - pResult->lower_idx + 1) == (int)pResult->num_tuples){
 	        				if(pResult->lower_idx != -1 && pResult->upper_idx != -1){
 		        				size_t dataIndexLow = pResult->lower_idx;
 								size_t dataIndexHigh = pResult->upper_idx;
