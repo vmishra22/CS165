@@ -379,7 +379,6 @@ leafNode* find_leafN(treeRoot* root, int key){
 	return lNode;
 }
 
-
 //return the position of column base data for a specific key.
 int findN(treeRoot* root, int key){
 	int i = 0;
@@ -800,6 +799,28 @@ int get_neighbor_index( node * n ) {
 	exit(EXIT_FAILURE);
 }
 
+leafNode* remove_entry_from_nodeN(leafNode* n, int key, int pos) {
+
+	int i;
+
+	// Remove the key and shift other keys accordingly.
+	i = 0;
+	while (n->keys[i] != key)
+		i++;
+	for (++i; i < n->num_keys; i++)
+		n->keys[i - 1] = n->keys[i];
+
+	while (n->pos[i] != pos)
+		i++;
+	for (++i; i < n->num_keys; i++)
+		n->pos[i - 1] = n->pos[i];
+
+
+	// One key fewer.
+	n->num_keys--;
+
+	return n;
+}
 
 node * remove_entry_from_node(node * n, int key, node * pointer) {
 
@@ -837,6 +858,40 @@ node * remove_entry_from_node(node * n, int key, node * pointer) {
 	return n;
 }
 
+treeRoot* adjust_rootN(treeRoot* root) {
+
+	treeRoot* new_root;
+
+	internalNode* iNode = NULL;
+	leafNode* lNode = NULL;
+
+	if(root->isLeaf){
+		lNode = root->lNode;
+		if(lNode->num_keys > 0)
+			return root;
+	}else{
+		iNode = root->iNode;
+		if(iNode->num_keys > 0)
+			return root;
+	}
+
+	if (!root->isLeaf) {
+		new_root = malloc(sizeof(treeRoot));
+		new_root->iNode = iNode->pointers[0];
+		new_root->iNode->parent = NULL;
+	}else
+		new_root = NULL;
+
+	if(root->isLeaf){
+		free(root->lNode);
+		free(root);
+	}else{
+		free(root->iNode);
+		free(root);
+	}
+	
+	return new_root;
+}
 
 node * adjust_root(node * root) {
 
@@ -1043,6 +1098,68 @@ node * redistribute_nodes(node * root, node * n, node * neighbor, int neighbor_i
 	return root;
 }
 
+treeRoot * delete_entryN( treeRoot* root, leafNode * n, int key, int pos) {
+
+	// Remove key and pointer from node.
+
+	n = remove_entry_from_nodeN(n, key, pos);
+
+	/* Case:  deletion from the root. 
+	 */
+
+	if (n == root->lNode) 
+		return adjust_rootN(root);
+
+
+	/* Case:  deletion from a node below the root.
+	 * (Rest of function body.)
+	 */
+
+	/* Determine minimum allowable size of node,
+	 * to be preserved after deletion.
+	 */
+
+	// min_keys = n->is_leaf ? cut(order - 1) : cut(order) - 1;
+
+	// /* Case:  node stays at or above minimum.
+	//  * (The simple case.)
+	//  */
+
+	// if (n->num_keys >= min_keys)
+	// 	return root;
+
+	// /* Case:  node falls below minimum.
+	//  * Either coalescence or redistribution
+	//  * is needed.
+	//  */
+
+	// /* Find the appropriate neighbor node with which
+	//  * to coalesce.
+	//  * Also find the key (k_prime) in the parent
+	//  * between the pointer to node n and the pointer
+	//  * to the neighbor.
+	//  */
+
+	// neighbor_index = get_neighbor_index( n );
+	// k_prime_index = neighbor_index == -1 ? 0 : neighbor_index;
+	// k_prime = n->parent->keys[k_prime_index];
+	// neighbor = neighbor_index == -1 ? n->parent->pointers[1] : 
+	// 	n->parent->pointers[neighbor_index];
+
+	// capacity = n->is_leaf ? order : order - 1;
+
+	// /* Coalescence. */
+
+	// if (neighbor->num_keys + n->num_keys < capacity)
+	// 	return coalesce_nodes(root, n, neighbor, neighbor_index, k_prime);
+
+	// /* Redistribution. */
+
+	// else
+	// 	return redistribute_nodes(root, n, neighbor, neighbor_index, k_prime_index, k_prime);
+
+	return root;
+}
 
 /* Deletes an entry from the B+ tree.
  * Removes the record and its key and pointer
@@ -1118,19 +1235,14 @@ node * delete_entry( node * root, node * n, int key, void * pointer ) {
 
 
 
-/* Master deletion function.
- */
-node * delete(node * root, int key) {
-	(void) key;
-	// node * key_leaf;
-	// record * key_record;
 
-	// key_record = find(root, key, false);
-	// key_leaf = find_leaf(root, key, false);
-	// if (key_record != NULL && key_leaf != NULL) {
-	// 	root = delete_entry(root, key_leaf, key, key_record);
-	// 	free(key_record);
-	// }
+//deletion.
+treeRoot* delete_key(treeRoot* root, int key){
+	int base_pos = findN(root, key);
+	leafNode* leaf_node = find_leafN(root, key);
+	if (leaf_node != NULL) {
+		root = delete_entryN(root, leaf_node, key, base_pos);
+	}
 	return root;
 }
 

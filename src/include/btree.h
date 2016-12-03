@@ -130,5 +130,8 @@ internalNode* insert_into_new_rootN(void* left, int key, void* right, bool isLea
 int get_left_indexN(internalNode* parent, void* left);
 treeRoot* insert_into_nodeN(treeRoot* root, internalNode* parent, int left_index, int key, void* right);
 treeRoot* insert_into_node_after_splittingN(treeRoot * root, internalNode* old_node, int left_index, int key, void* right);
+treeRoot* delete_key(treeRoot* root, int key);
+treeRoot* adjust_rootN(treeRoot* root) ;
+leafNode* remove_entry_from_nodeN(leafNode* n, int key, int pos);
 
 #endif

@@ -215,8 +215,22 @@ typedef enum OperatorType {
     AVG_SUM,
     ADD_SUB,
     MAX_MIN,
-    JOIN
+    JOIN,
+    UPDATE,
+    DELETE
 } OperatorType;
+
+typedef struct DeleteOperator {
+    Table* table;
+    GeneralizedColumn* gen_res_col;
+} DeleteOperator;
+
+typedef struct UpdateOperator {
+    Table* table;
+    Column* column;
+    GeneralizedColumn* gen_res_col;
+    int update_val;
+} UpdateOperator;
 /*
  * necessary fields for insertion
  */
@@ -313,6 +327,8 @@ typedef union OperatorFields {
     AddSubOperator add_sub_operator;
     MaxMinOperator max_min_operator;
     JoinOperator join_operator;
+    UpdateOperator update_operator;
+    DeleteOperator delete_operator;
 } OperatorFields;
 
 /*

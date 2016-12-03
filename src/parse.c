@@ -254,7 +254,54 @@ message_status parse_create(char* create_arguments) {
     free(to_free);
     return mes_status;
 }
+static GeneralizedColumn* get_generic_result_column(char* handleName, ClientContext* context, size_t* nData)
+{
+    int j;
+    GeneralizedColumn* pGenericColumn = NULL;
+    GeneralizedColumnHandle* pGenHandle = NULL;
 
+    int numCHandles = context->chandles_in_use;
+    for(j=0; j<numCHandles; j++){
+        pGenHandle = &(context->chandle_table[j]);
+        if(strcmp(pGenHandle->name, handleName) == 0 && 
+          (pGenHandle->generalized_column.column_type == RESULT))
+        {
+            Result* pResult = pGenHandle->generalized_column.column_pointer.result;
+            pGenericColumn = malloc(sizeof(GeneralizedColumn));
+            pGenericColumn->column_type = RESULT;
+            pGenericColumn->column_pointer.result = pResult;
+            *nData = pResult->num_tuples;
+            break;
+        }
+    }
+
+    return pGenericColumn;
+}
+
+static GeneralizedColumn* get_generic_table_column(char* handleName, size_t* nData, message* send_message)
+{
+    GeneralizedColumn* pGenericColumn = NULL;
+
+    strsep(&handleName, ".");
+    char* tbl_name = strsep(&handleName, ".");
+    char* col_name = handleName;
+    Table* scan_table = lookup_table(tbl_name);
+    if (scan_table == NULL) {
+        send_message->status = OBJECT_NOT_FOUND;
+        return NULL;
+    }
+    Column* scan_column = retrieve_column_for_scan(scan_table, col_name, true);
+    if (scan_column == NULL) {
+        send_message->status = OBJECT_NOT_FOUND;
+        return NULL;
+    }
+    pGenericColumn = malloc(sizeof(GeneralizedColumn));
+    pGenericColumn->column_type = COLUMN;
+    pGenericColumn->column_pointer.column = scan_column;
+    *nData = scan_table->table_length;
+
+    return pGenericColumn;
+}
 /**
  * parse_load
  **/
@@ -364,6 +411,107 @@ DbOperator* parse_load(char* query_command, message* send_message) {
     }
 }
 
+DbOperator* parse_delete(char* query_command, ClientContext* context, message* send_message) {
+    if (strncmp(query_command, "(", 1) == 0) {
+        query_command++;
+        char** command_index = &query_command;
+        char* db_tbl_name = next_token(command_index, &send_message->status);
+        char* targetHandle = next_token(command_index, &send_message->status);
+
+        if (send_message->status == INCORRECT_FORMAT) {
+            return NULL;
+        }
+
+        int last_char = strlen(targetHandle) - 1;
+        if (targetHandle[last_char] != ')') {
+            return NULL;
+        }
+        targetHandle[last_char] = '\0';
+
+        strsep(&db_tbl_name, ".");
+        char* tbl_name = strsep(&db_tbl_name, ".");
+
+        Table* scan_table = lookup_table(tbl_name);
+        if (scan_table == NULL) {
+            send_message->status = OBJECT_NOT_FOUND;
+            return NULL;
+        }
+
+        size_t nData = 0;
+        GeneralizedColumn* pGenColumn = NULL;
+        pGenColumn = get_generic_result_column(targetHandle, context, &nData);
+
+        DbOperator* dbo = malloc(sizeof(DbOperator));
+        dbo->type = DELETE;
+        dbo->operator_fields.delete_operator.table = scan_table;
+        dbo->operator_fields.delete_operator.gen_res_col = pGenColumn;
+
+        send_message->status = OK_WAIT_FOR_RESPONSE;
+        return dbo;
+    }else {
+        send_message->status = UNKNOWN_COMMAND;
+        return NULL;
+    }
+
+    return NULL;
+}
+
+DbOperator* parse_update(char* query_command, ClientContext* context, message* send_message) {
+    if (strncmp(query_command, "(", 1) == 0) {
+        query_command++;
+        char** command_index = &query_command;
+        char* db_tbl_col_name = next_token(command_index, &send_message->status);
+        char* targetHandle = next_token(command_index, &send_message->status);
+        char* newValue = next_token(command_index, &send_message->status);
+
+        if (send_message->status == INCORRECT_FORMAT) {
+            return NULL;
+        }
+
+        int last_char = strlen(newValue) - 1;
+        if (newValue[last_char] != ')') {
+            return NULL;
+        }
+        newValue[last_char] = '\0';
+        int update_val = atoi(newValue);
+
+        strsep(&db_tbl_col_name, ".");
+        char* tbl_name = strsep(&db_tbl_col_name, ".");
+        char* col_name = db_tbl_col_name;
+
+        Table* scan_table = lookup_table(tbl_name);
+        if (scan_table == NULL) {
+            send_message->status = OBJECT_NOT_FOUND;
+            return NULL;
+        }
+        Column* scan_column = retrieve_column_for_scan(scan_table, col_name, true);
+        if (scan_column == NULL) {
+            send_message->status = OBJECT_NOT_FOUND;
+            return NULL;
+        }
+
+        size_t nData = 0;
+        GeneralizedColumn* pGenColumn = NULL;
+        pGenColumn = get_generic_result_column(targetHandle, context, &nData);
+
+        DbOperator* dbo = malloc(sizeof(DbOperator));
+        dbo->type = UPDATE;
+        dbo->operator_fields.update_operator.table = scan_table;
+        dbo->operator_fields.update_operator.column = scan_column;
+        dbo->operator_fields.update_operator.gen_res_col = pGenColumn;
+        dbo->operator_fields.update_operator.update_val = update_val;
+
+        send_message->status = OK_WAIT_FOR_RESPONSE;
+        return dbo;
+
+    }else {
+        send_message->status = UNKNOWN_COMMAND;
+        return NULL;
+    }
+
+    return NULL;
+}
+
 /**
  * parse_insert reads in the arguments for a create statement and 
  * then passes these arguments to a database function to insert a row.
@@ -414,54 +562,7 @@ DbOperator* parse_insert(char* query_command, message* send_message) {
     }
 }
 
-static GeneralizedColumn* get_generic_result_column(char* handleName, ClientContext* context, size_t* nData)
-{
-    int j;
-    GeneralizedColumn* pGenericColumn = NULL;
-    GeneralizedColumnHandle* pGenHandle = NULL;
 
-    int numCHandles = context->chandles_in_use;
-    for(j=0; j<numCHandles; j++){
-        pGenHandle = &(context->chandle_table[j]);
-        if(strcmp(pGenHandle->name, handleName) == 0 && 
-          (pGenHandle->generalized_column.column_type == RESULT))
-        {
-            Result* pResult = pGenHandle->generalized_column.column_pointer.result;
-            pGenericColumn = malloc(sizeof(GeneralizedColumn));
-            pGenericColumn->column_type = RESULT;
-            pGenericColumn->column_pointer.result = pResult;
-            *nData = pResult->num_tuples;
-            break;
-        }
-    }
-
-    return pGenericColumn;
-}
-
-static GeneralizedColumn* get_generic_table_column(char* handleName, size_t* nData, message* send_message)
-{
-    GeneralizedColumn* pGenericColumn = NULL;
-
-    strsep(&handleName, ".");
-    char* tbl_name = strsep(&handleName, ".");
-    char* col_name = handleName;
-    Table* scan_table = lookup_table(tbl_name);
-    if (scan_table == NULL) {
-        send_message->status = OBJECT_NOT_FOUND;
-        return NULL;
-    }
-    Column* scan_column = retrieve_column_for_scan(scan_table, col_name, true);
-    if (scan_column == NULL) {
-        send_message->status = OBJECT_NOT_FOUND;
-        return NULL;
-    }
-    pGenericColumn = malloc(sizeof(GeneralizedColumn));
-    pGenericColumn->column_type = COLUMN;
-    pGenericColumn->column_pointer.column = scan_column;
-    *nData = scan_table->table_length;
-
-    return pGenericColumn;
-}
 /**
  * parse_max_min
  **/
@@ -944,6 +1045,14 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
     } else if (strncmp(query_command, "relational_insert", 17) == 0) {
         query_command += 17;
         dbo = parse_insert(query_command, send_message);
+
+    }else if (strncmp(query_command, "relational_delete", 17) == 0) {
+        query_command += 17;
+        dbo = parse_delete(query_command, context, send_message);
+
+    }else if (strncmp(query_command, "relational_update", 17) == 0) {
+        query_command += 17;
+        dbo = parse_update(query_command, context, send_message);
 
     }else if (strncmp(query_command, "load", 4) == 0) {
         query_command += 4;
