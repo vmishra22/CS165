@@ -38,7 +38,7 @@ Column* retrieve_column_for_scan(Table* table, char* colname, bool loadData){
 				if(!ptr_column){
 					return NULL;
 				}
-				scanColumn->data = (int*)malloc(sizeof(int)*(table->table_length));
+				scanColumn->data = (int*)malloc(sizeof(int)*(table->col_data_capacity));
 				size_t read_val = fread(scanColumn->data, sizeof(int), table->table_length, ptr_column);
 				(void)read_val;
 				fclose(ptr_column);
@@ -740,6 +740,8 @@ void form_column_index(Table* table){
 				createTreeClusteredColumnIndex(table, column);
 			}
 
+			size_t index_capacity = pIndex->index_data_capacity;
+
 		    for(i=0; i<numColumns; i++){
 		        Column* otherColumn = &(table->columns[i]);
 		        ColumnIndex* pOtherColumnIndex = otherColumn->index;
@@ -747,7 +749,7 @@ void form_column_index(Table* table){
 		        	otherColumn->index = (ColumnIndex*)malloc(sizeof(ColumnIndex));
 		            memset(otherColumn->index, 0, sizeof(ColumnIndex));
 		            pOtherColumnIndex = otherColumn->index;
-		            pOtherColumnIndex->index_data_capacity = columnSize;
+		            pOtherColumnIndex->index_data_capacity = index_capacity;
 		            pOtherColumnIndex->tuples = (dataRecord*)
 		            							malloc(sizeof(dataRecord)*(pOtherColumnIndex->index_data_capacity));
 		            memset(pOtherColumnIndex->tuples, 0, sizeof(dataRecord)*(pOtherColumnIndex->index_data_capacity));
@@ -969,6 +971,9 @@ void execute_DbOperator(DbOperator* query, char** msg) {
             //Copy the values into column data.
             for(i=0; i<numColumns; i++){
                 column = &(table->columns[i]);
+                if(column->data == NULL){
+        			column = retrieve_column_for_scan(table, column->name, true);
+        		}
                 column->data[columnSize] = query->operator_fields.insert_operator.values[i];
             }
             (table->table_length)++;
@@ -990,29 +995,104 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         }
         case UPDATE:
         {
-   //      	table = query->operator_fields.update_operator.table;
-   //          //size_t numColumns = table->col_count;
-   //          column = query->operator_fields.update_operator.column;
-   //          GeneralizedColumn* pGenResColumn = query->operator_fields.update_operator.gen_res_col;
-   //          int update_val = query->operator_fields.update_operator.update_val;
+        	table = query->operator_fields.update_operator.table;
+            size_t numColumns = table->col_count;
+            Column* targetColumn = query->operator_fields.update_operator.column;
+            GeneralizedColumn* pGenResColumn = query->operator_fields.update_operator.gen_res_col;
+            int update_val = query->operator_fields.update_operator.update_val;
+         	size_t columnSize = table->table_length;
+            for(j=0; j<(int)numColumns; j++){
+            	column = &(table->columns[j]);
+            	if(column->data == NULL){
+        			column = retrieve_column_for_scan(table, column->name, true);
+        		}
+            }
+            int *values = (int*)malloc(sizeof(int) * numColumns);
 
-   //          Result* pResult = pGenResColumn->column_pointer.result;   
-   //          //int* colData = column->data;
-   //       	ColumnIndex* pIndex = column->index;
-			// if(pIndex != NULL){
-			// 	if((pResult->upper_idx - pResult->lower_idx + 1) == (int)pResult->num_tuples){
-   //  				if(pResult->lower_idx != -1 && pResult->upper_idx != -1){
-   //  		// 			size_t dataIndexLow = pResult->lower_idx;
-   //  		// 			dataRecord* lColTuple = &(pIndex->tuples[dataIndexLow]);
-   //    //   				lColTuple->val = update_val;
-			// 			// int basePos = lColTuple->pos;
-			// 			// colData[basePos] = update_val;
-			// 		}
-			// 	}else{
-			// 		//int* resPayload = (int*)pResult->payload;
-			// 		//dataRecord* lColTuple = &(pIndex->tuples[dataIndexLow]);
-			// 	}
-   //  		}
+            Result* pResult = pGenResColumn->column_pointer.result;   
+            if(pResult->lower_idx != -1 && pResult->upper_idx != -1){
+				for(j=0; j<(int)numColumns; j++){
+					column = &(table->columns[j]);
+					ColumnIndex* pIndex = column->index;
+					dataRecord* colTuplesArr = pIndex->tuples;
+					for(i=(size_t)(pResult->lower_idx); i<=(size_t)(pResult->upper_idx); i++){
+						int value = (colTuplesArr[i]).val;
+						if(strcmp(targetColumn->name, column->name) == 0)
+							values[j] = update_val;
+						else
+							values[j] = value;
+
+	                	if(pIndex->indexType == BTREE){
+	                		delete_key(pIndex->dataIndex, value);
+	                	}else{
+	                		dataRecord* pTupleRecord = &(pIndex->tuples[i]);
+	                		pTupleRecord->val = (1<<30);
+	                		pTupleRecord->pos = -1;
+	                	}
+	                }	
+				}
+			}else{
+				if(pResult->num_tuples > 0){
+					int *pPayload = pResult->payload;
+					qsort(pPayload, pResult->num_tuples, sizeof(int), cmppos);
+					for(j=0; j<(int)numColumns; j++){
+						column = &(table->columns[j]);
+						for(i=0; i<(pResult->num_tuples); i++){
+							if(strcmp(targetColumn->name, column->name) == 0)
+								values[j] = update_val;
+							else
+								values[j] = column->data[pPayload[i]];
+	    					column->data[pPayload[i]] = (1<<30); 
+	    				}
+	    			}
+	    			for(j=0; j<(int)numColumns; j++){
+	    				column = &(table->columns[j]);
+						ColumnIndex* pIndex = column->index;
+						if(pIndex != NULL){
+							dataRecord* colTuplesArr = pIndex->tuples;
+							for(i=0; i<(pResult->num_tuples); i++){
+								int pos = pPayload[i];
+								for(k=0; k<(int)columnSize; k++){
+									if(colTuplesArr[k].pos == pos){
+										if(pIndex->indexType == BTREE){
+		                					delete_key(pIndex->dataIndex, colTuplesArr[k].val);
+										}
+	                					else{
+											dataRecord* pTupleRecord = &(pIndex->tuples[k]);
+			                				pTupleRecord->val = (1<<30);
+			                				pTupleRecord->pos = -1;
+		                				}
+		                				break;
+									}
+								}
+							}
+						}
+	    			}
+				}
+			}
+
+			if(columnSize == table->col_data_capacity){
+            	table->col_data_capacity *= 2; 
+            	for(i=0; i<numColumns; i++){
+            		column = &(table->columns[i]);
+            		if(column->data == NULL){
+            			column = retrieve_column_for_scan(table, column->name, true);
+            		}
+            		column->data = (int*)realloc(column->data, (table->col_data_capacity) * sizeof(int));
+            	}
+            }
+            
+            //Copy the values into column data.
+            for(i=0; i<numColumns; i++){
+                column = &(table->columns[i]);
+                column->data[columnSize] = values[i];
+            }
+            (table->table_length)++;
+
+            update_column_index(table, values);
+
+            if(values != NULL) { free(values); values = NULL;}
+            if(pGenResColumn != NULL){ free(pGenResColumn); pGenResColumn = NULL; }
         	break;
         }
         case DELETE:
@@ -1029,27 +1109,26 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         			column = retrieve_column_for_scan(table, column->name, true);
         		}
             }
-            if(((pResult->upper_idx - pResult->lower_idx + 1) == (int)pResult->num_tuples) && (pResult->num_tuples > 1))
-            {
-				if(pResult->lower_idx != -1 && pResult->upper_idx != -1){
-					for(j=0; j<numColumns; j++){
-						column = &(table->columns[j]);
-						ColumnIndex* pIndex = column->index;
-						dataRecord* colTuplesArr = pIndex->tuples;
-						for(i=(size_t)(pResult->lower_idx); i<=(size_t)(pResult->upper_idx); i++){
-							int value = (colTuplesArr[i]).val;
-							int pos = (colTuplesArr[i]).pos;
-         
-			                column->data[pos] = (1<<30);             			
-	
-		                	if(pIndex->indexType == BTREE){
-		                		delete_key(pIndex->dataIndex, value);
-		                	}else{
-		                		dataRecord* pTupleRecord = &(pIndex->tuples[i]);
-		                		pTupleRecord->val = (1<<30);
-		                	}
-		                }	
-					}
+            // if(((pResult->upper_idx - pResult->lower_idx + 1) == (int)pResult->num_tuples) && (pResult->num_tuples > 1))
+            // {
+			if(pResult->lower_idx != -1 && pResult->upper_idx != -1){
+				for(j=0; j<numColumns; j++){
+					column = &(table->columns[j]);
+					ColumnIndex* pIndex = column->index;
+					dataRecord* colTuplesArr = pIndex->tuples;
+					for(i=(size_t)(pResult->lower_idx); i<=(size_t)(pResult->upper_idx); i++){
+						int value = (colTuplesArr[i]).val;
+						int pos = (colTuplesArr[i]).pos;
+     
+		                column->data[pos] = (1<<30);             			
+
+	                	if(pIndex->indexType == BTREE){
+	                		delete_key(pIndex->dataIndex, value);
+	                	}else{
+	                		dataRecord* pTupleRecord = &(pIndex->tuples[i]);
+	                		pTupleRecord->val = (1<<30);
+	                	}
+	                }	
 				}
 			}else{
 				if(pResult->num_tuples > 0){
@@ -1077,6 +1156,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 											dataRecord* pTupleRecord = &(pIndex->tuples[k]);
 			                				pTupleRecord->val = (1<<30);
 		                				}
+		                				break;
 									}
 								}
 							}
@@ -1281,11 +1361,11 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 	        			break;
 	        		}
 	        		resultIndices = computeResultIndices(table, column, comparator);
-	        		if(column->data != NULL)
-	        		{
-	    				free(column->data);
-	    				column->data = NULL;
-	        		}
+	        // 		if(column->data != NULL)
+	        // 		{
+	    				// free(column->data);
+	    				// column->data = NULL;
+	        // 		}
 	        	}
 	        }
 	        else{

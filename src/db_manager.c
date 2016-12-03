@@ -47,7 +47,7 @@ Table* create_table(Db* db, const char* name, size_t num_columns, Status *ret_st
 		strcpy(table->columns[i].name, "");
 	}
 	table->col_count = num_columns;
-	table->col_data_capacity = 200;
+	table->col_data_capacity = 1100;
 	table->table_length = 0;
 	strcpy(table->firstDeclaredClustCol, "");
 	
@@ -190,7 +190,7 @@ Status db_startup(){
 				column->index = (ColumnIndex*)malloc(sizeof(ColumnIndex));
 	            memset(column->index, 0, sizeof(ColumnIndex));
 	            ColumnIndex* pIndex = column->index;
-	            pIndex->index_data_capacity = table->table_length;
+	            pIndex->index_data_capacity = catalog.indexDataCapacity[i];
 	            pIndex->tuples = (dataRecord*)malloc(sizeof(dataRecord)*(pIndex->index_data_capacity));
 	            memset(pIndex->tuples, 0, sizeof(dataRecord)*(pIndex->index_data_capacity));
 	            if( strcmp(catalog.columnIndexClustType[i][j], "clustered") == 0)
@@ -229,6 +229,7 @@ Status db_startup(){
 	            	treeRoot* root = NULL;
 	            	root = read_tree_from_file(ptr_index);
 	            	pIndex->dataIndex = root;
+	            	getTreeDataRecords(root, &(pIndex->tuples));
 	            }
 	            else{
 	            	size_t readVal = fread(pIndex->tuples, sizeof(dataRecord), table->table_length, ptr_index);
@@ -330,6 +331,8 @@ Status saveDatabase(){
 					strcpy(catalog.columnIndexClustType[i][j], "unclustered");
 				else
 					strcpy(catalog.columnIndexClustType[i][j], "");
+
+				catalog.indexDataCapacity[i] = pIndex->index_data_capacity;
 
 				if(pIndex->indexType == SORTED){
 					strcpy(catalog.columnIndexType[i][j], "SORTED");

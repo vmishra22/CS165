@@ -366,6 +366,7 @@ typedef struct Catalog
     size_t columnDataCapacity[MAX_TABLE_SIZE];
     char columnNames[MAX_TABLE_SIZE][MAX_COLUMN_SIZE][MAX_SIZE_NAME];
     char firstDeclaredClustCol[MAX_TABLE_SIZE] [MAX_SIZE_NAME];
+    size_t indexDataCapacity[MAX_TABLE_SIZE];
     char columnIndexType[MAX_TABLE_SIZE][MAX_COLUMN_SIZE][MAX_SIZE_NAME];
     char columnIndexClustType[MAX_TABLE_SIZE][MAX_COLUMN_SIZE][MAX_SIZE_NAME];
 }Catalog;

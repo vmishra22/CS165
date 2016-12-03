@@ -17,8 +17,8 @@ void getTreeDataRecords(treeRoot* root, dataRecord** oRecords){
 		lNode = root->lNode;
 		for (i = 0; i < lNode->num_keys; i++) {
 			dataRecord* pDataRecord = &((*oRecords)[index++]);
-			pDataRecord->pos = lNode->keys[i];
-			pDataRecord->val = lNode->pos[i];
+			pDataRecord->val = lNode->keys[i];
+			pDataRecord->pos = lNode->pos[i];
 		}
 	}
 	else{
@@ -33,8 +33,8 @@ void getTreeDataRecords(treeRoot* root, dataRecord** oRecords){
 		while (true) {
 			for (i = 0; i < lNode->num_keys; i++) {
 				dataRecord* pDataRecord = &((*oRecords)[index++]);
-				pDataRecord->pos = lNode->keys[i];
-				pDataRecord->val = lNode->pos[i];
+				pDataRecord->val = lNode->keys[i];
+				pDataRecord->pos = lNode->pos[i];
 			}
 			if (lNode->nextLeafNode != NULL) {
 				lNode = lNode->nextLeafNode;
