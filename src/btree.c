@@ -394,6 +394,19 @@ int findN(treeRoot* root, int key){
 	return 0;
 }
 
+void find_and_update_position(treeRoot* root, int key, int newPos){
+	int i = 0;
+	leafNode* lNode = find_leafN(root, key);
+	if (lNode == NULL) return;
+	for (i = 0; i < lNode->num_keys; i++)
+		if (lNode->keys[i] == key) break;
+	if (i == lNode->num_keys) 
+		return;
+	else
+		lNode->pos[i] = newPos;
+
+	return;
+}
 
 /* Finds the appropriate place to
  * split a node that is too big into two.

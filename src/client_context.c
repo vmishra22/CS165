@@ -622,7 +622,7 @@ void create_unclustered_index(Table* table, bool isAnyClusteredIndex){
 	}
 }
 
-void update_column_index(Table* table, int* values){
+void update_column_index(Table* table, int* values, bool updateVal){
 	size_t i=0, j=0, k = 0, col_Idx = 0, idx = 0;;
 	size_t numColumns = table->col_count;
 	size_t columnSize = table->table_length;
@@ -678,8 +678,10 @@ void update_column_index(Table* table, int* values){
 							continue;
 						Column* tCol = &(table->columns[j]);
 						ColumnIndex* tIndex = tCol->index;
-						if(tIndex->unclustered)
-							continue;
+						// if(!updateVal){
+							if(tIndex->unclustered)
+								continue;
+						
 						int* baseData = tCol->data;
 						dataRecord* tColTuple = &(tIndex->tuples[k]);
 						tColTuple->pos = basePos;
@@ -705,11 +707,20 @@ void update_column_index(Table* table, int* values){
 					root = (treeRoot*)malloc(sizeof(treeRoot));
 					memset(root, 0, sizeof(treeRoot));
 				}
-				else 
+				else {
 					root = pchIndex->dataIndex;
+				}
+				
 				int basePos = columnSize-1;
 				int value = values[idx];
-				root = insert_in_treeN(root, value, basePos);
+
+				//if(!updateVal){
+					
+					root = insert_in_treeN(root, value, basePos);
+				// }else{
+				// 	find_and_update_position(root, value, basePos);
+				// }
+				
 				getTreeDataRecords(root, &(pchIndex->tuples));
 			}
 	    }
@@ -978,7 +989,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
             }
             (table->table_length)++;
 
-            update_column_index(table, query->operator_fields.insert_operator.values);
+            update_column_index(table, query->operator_fields.insert_operator.values, false);
             //form_column_index(table);
 
             char insertMsg[] = "Insert Operation Succeeded";
@@ -1022,13 +1033,13 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 						else
 							values[j] = value;
 
-	                	if(pIndex->indexType == BTREE){
-	                		delete_key(pIndex->dataIndex, value);
-	                	}else{
+	                	// if(pIndex->indexType == BTREE){
+	                	// 	//delete_key(pIndex->dataIndex, value);
+	                	// }else{
 	                		dataRecord* pTupleRecord = &(pIndex->tuples[i]);
 	                		pTupleRecord->val = (1<<30);
 	                		pTupleRecord->pos = -1;
-	                	}
+	                	//}
 	                }	
 				}
 			}else{
@@ -1054,14 +1065,14 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 								int pos = pPayload[i];
 								for(k=0; k<(int)columnSize; k++){
 									if(colTuplesArr[k].pos == pos){
-										if(pIndex->indexType == BTREE){
-		                					delete_key(pIndex->dataIndex, colTuplesArr[k].val);
-										}
-	                					else{
+										// if(pIndex->indexType == BTREE){
+		        //         					//delete_key(pIndex->dataIndex, colTuplesArr[k].val);
+										// }
+	         //        					else{
 											dataRecord* pTupleRecord = &(pIndex->tuples[k]);
 			                				pTupleRecord->val = (1<<30);
 			                				pTupleRecord->pos = -1;
-		                				}
+		                				//}
 		                				break;
 									}
 								}
@@ -1089,7 +1100,8 @@ void execute_DbOperator(DbOperator* query, char** msg) {
             }
             (table->table_length)++;
 
-            update_column_index(table, values);
+
+            update_column_index(table, values, true);
 
             if(values != NULL) { free(values); values = NULL;}
             if(pGenResColumn != NULL){ free(pGenResColumn); pGenResColumn = NULL; }

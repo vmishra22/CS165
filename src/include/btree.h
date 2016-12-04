@@ -133,5 +133,6 @@ treeRoot* insert_into_node_after_splittingN(treeRoot * root, internalNode* old_n
 treeRoot* delete_key(treeRoot* root, int key);
 treeRoot* adjust_rootN(treeRoot* root) ;
 leafNode* remove_entry_from_nodeN(leafNode* n, int key, int pos);
+void find_and_update_position(treeRoot* root, int key, int newPos);
 
 #endif
