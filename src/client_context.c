@@ -648,15 +648,17 @@ void update_column_index(Table* table, int* values, bool updateVal){
 			}
 
 	    	if(pIndex->indexType == SORTED){
-	    		int* baseSortData = column->data;
-				//copy base data into index data
+	    		if(!updateVal){
+		    		int* baseSortData = column->data;
+					//copy base data into index data
 
-				//Fill the data in the end of the index tuples
-				dataRecord* colTuple = &(pIndex->tuples[columnSize-1]);
-				if(colTuple == NULL)
-					return;
-				colTuple->pos = columnSize-1;
-				colTuple->val = baseSortData[columnSize-1];
+					//Fill the data in the end of the index tuples
+					dataRecord* colTuple = &(pIndex->tuples[columnSize-1]);
+					if(colTuple == NULL)
+						return;
+					colTuple->pos = columnSize-1;
+					colTuple->val = baseSortData[columnSize-1];
+				}
 
 				//Now sort the index data
 				dataRecord** colTuplesArr = &(pIndex->tuples);
@@ -714,12 +716,11 @@ void update_column_index(Table* table, int* values, bool updateVal){
 				int basePos = columnSize-1;
 				int value = values[idx];
 
-				//if(!updateVal){
-					
+				if(!updateVal){
 					root = insert_in_treeN(root, value, basePos);
-				// }else{
-				// 	find_and_update_position(root, value, basePos);
-				// }
+				}else{
+					//find_and_update_position(root, value, basePos);
+				}
 				
 				getTreeDataRecords(root, &(pchIndex->tuples));
 			}
@@ -1033,13 +1034,11 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 						else
 							values[j] = value;
 
-	                	// if(pIndex->indexType == BTREE){
-	                	// 	//delete_key(pIndex->dataIndex, value);
-	                	// }else{
-	                		dataRecord* pTupleRecord = &(pIndex->tuples[i]);
-	                		pTupleRecord->val = (1<<30);
-	                		pTupleRecord->pos = -1;
-	                	//}
+						dataRecord* pTupleRecord = &(pIndex->tuples[i]);
+                		int current_base_pos = pTupleRecord->pos;
+                		//int current_base_val = pTupleRecord->val;
+                		column->data[current_base_pos] = values[j];
+                		pTupleRecord->val = values[j];
 	                }	
 				}
 			}else{
@@ -1050,29 +1049,25 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 						column = &(table->columns[j]);
 						for(i=0; i<(pResult->num_tuples); i++){
 							if(strcmp(targetColumn->name, column->name) == 0)
+							{
 								values[j] = update_val;
+								column->data[pPayload[i]] = update_val;
+							}
 							else
 								values[j] = column->data[pPayload[i]];
-	    					column->data[pPayload[i]] = (1<<30); 
 	    				}
 	    			}
 	    			for(j=0; j<(int)numColumns; j++){
 	    				column = &(table->columns[j]);
 						ColumnIndex* pIndex = column->index;
 						if(pIndex != NULL){
-							dataRecord* colTuplesArr = pIndex->tuples;
+							dataRecord** colTuplesArr = &(pIndex->tuples);
 							for(i=0; i<(pResult->num_tuples); i++){
 								int pos = pPayload[i];
 								for(k=0; k<(int)columnSize; k++){
-									if(colTuplesArr[k].pos == pos){
-										// if(pIndex->indexType == BTREE){
-		        //         					//delete_key(pIndex->dataIndex, colTuplesArr[k].val);
-										// }
-	         //        					else{
-											dataRecord* pTupleRecord = &(pIndex->tuples[k]);
-			                				pTupleRecord->val = (1<<30);
-			                				pTupleRecord->pos = -1;
-		                				//}
+									dataRecord* pDataRecord = &((*colTuplesArr)[k]);
+									if(pDataRecord->pos == pos){
+										pDataRecord->val = values[j];
 		                				break;
 									}
 								}
@@ -1094,11 +1089,11 @@ void execute_DbOperator(DbOperator* query, char** msg) {
             }
             
             //Copy the values into column data.
-            for(i=0; i<numColumns; i++){
-                column = &(table->columns[i]);
-                column->data[columnSize] = values[i];
-            }
-            (table->table_length)++;
+            // for(i=0; i<numColumns; i++){
+            //     column = &(table->columns[i]);
+            //     column->data[columnSize] = values[i];
+            // }
+            // (table->table_length)++;
 
 
             update_column_index(table, values, true);
