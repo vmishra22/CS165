@@ -114,7 +114,7 @@ void enqueue( void* new_node, bool isLeaf);
 void* dequeue( void );
 void writedata(void* node, FILE* fp);
 void write_tree_to_file(treeRoot* root, FILE* fp);
-void readdata(void* node, void* prevNode, int levels, FILE* fp);
+void readdata(void* node, void* prevNode, int levels, FILE* fp, leafNode** pLeafConnection);
 treeRoot* read_tree_from_file(FILE* fp);
 leafNode* find_leafN(treeRoot* root, int key);
 int findN(treeRoot* root, int key);

@@ -20,6 +20,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/time.h>
 
 #include "common.h"
 #include "message.h"
@@ -86,7 +87,7 @@ void parse_load_query(char* loadQuery, int client_socket){
         rewind(fd);
 
         //printf("In file size = %ld bytes.\n", actual_size);
-        size_t unit_size = 1<<12;
+        size_t unit_size = 1<<14;
         size_t num_chunks = 0;
         num_chunks = actual_size / unit_size;
         //size_t last_chunk_size = actual_size % unit_size;   
@@ -119,6 +120,7 @@ void parse_load_query(char* loadQuery, int client_socket){
 
             size_t col_val_capacity = unit_size;
             char** col_values = (char**)malloc(sizeof(char*) * nCols);
+            memset(col_values, 0, sizeof(char*) * nCols);
             for(i=0; i<nCols; i++){
                 col_values[i] = (char*)malloc(sizeof(char) * col_val_capacity);
                 memset(col_values[i], '\0', col_val_capacity);
@@ -489,8 +491,12 @@ int main(void)
         if (send_message.length > 1) {
 
             if(strncmp(send_message.payload, "load", 4) == 0){
+                struct timeval stop, start;
+                gettimeofday(&start, NULL); 
                 parse_load_query(send_message.payload, client_socket);
-
+                gettimeofday(&stop, NULL);
+                double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
+                printf("Load Execution took %f seconds\n", secs);
             }
             else{
                 // Send the message_header, which tells server payload size

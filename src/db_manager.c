@@ -167,6 +167,7 @@ Status db_startup(){
 		table->table_length = catalog.columnSize[i];
 		table->col_data_capacity = catalog.columnDataCapacity[i];
 		table->columns = (Column*)malloc(sizeof(Column)*numTabColumns);
+		memset(table->columns, 0, sizeof(Column)*numTabColumns);
         strcpy(table->firstDeclaredClustCol, catalog.firstDeclaredClustCol[i]);
 		for(j=0; j<numTabColumns; j++){
 			Column* column = &(table->columns[j]);
@@ -309,7 +310,8 @@ Status saveDatabase(){
 		for(j=0; j<numTableColumns; j++){
 			Column* column = &(table->columns[j]);
 			char* colName = column->name;
-			ColumnIndex* pIndex = column->index;
+			ColumnIndex* pIndex = NULL;
+			pIndex = column->index;
 			if(pIndex != NULL){
 				FILE *ptr_index;
 				char indexName[64];
@@ -373,7 +375,8 @@ Status shutdown_server(){
 			int* colData = (current_db->tables[i]).columns[j].data;
 			if(colData != NULL)
 				free(colData);
-			ColumnIndex* index = (current_db->tables[i]).columns[j].index;
+			ColumnIndex* index = NULL;
+			index = (current_db->tables[i]).columns[j].index;
 			if(index != NULL){
 				if(index->tuples != NULL)
 					free(index->tuples);
