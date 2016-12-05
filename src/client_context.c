@@ -1202,10 +1202,10 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	//divide the data into page sizes
         	//Each operator gets 5% of the page size for result
         	size_t system_page_size = sysconf(_SC_PAGESIZE);
-        	size_t page_size = system_page_size - (numOperators*system_page_size*0.05);
+        	int page_size = (int)system_page_size - (numOperators*(int)system_page_size*0.05);
         	while(page_size <= 0){
-        		system_page_size <<=4;
-        		page_size = system_page_size;
+        		system_page_size<<=2;
+        		page_size = (int)system_page_size - (numOperators*(int)system_page_size*0.01);
         	}
         	size_t num_pages = (columnSize<<2)/page_size;
         	//data_rem is #column elements for the last page
@@ -1241,8 +1241,9 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 	        		pGenHandle->generalized_column.column_type = RESULT;
 	        		Result* pResult = (Result*)malloc(sizeof(Result));
 					memset(pResult, 0, sizeof(Result));
-					int* resultIndices = (int*)malloc(sizeof(int) * page_size * 0.5);
-					memset(resultIndices, 0, sizeof(int)*page_size*0.5 );
+					size_t memSize =  sizeof(int) * page_size*0.2;
+					int* resultIndices = (int*)malloc(memSize);
+					memset(resultIndices, 0, memSize);
 					pResult->data_type = INT;
 					pResult->payload = resultIndices;
 					pGenHandle->generalized_column.column_pointer.result = pResult;
@@ -1275,7 +1276,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 
         	gettimeofday(&stop, NULL);
             double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
-            //printf("Batch Execution for numQueries = %d took %f seconds\n", numOperators, secs);
+            printf("Batch Execution for numQueries = %d took %f seconds\n", numOperators, secs);
 
             
             free(pQueryScanDataArr);
