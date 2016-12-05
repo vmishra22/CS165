@@ -821,8 +821,8 @@ void shared_scan(void* threadScanData){
     {
 		pResult = (Result*)malloc(sizeof(Result));
 		memset(pResult, 0, sizeof(Result));
-		resultIndices = (int*)malloc(sizeof(int) * 1000);
-		memset(resultIndices, 0, sizeof(int)*1000);
+		resultIndices = (int*)malloc(sizeof(int) * (scanData->dataSize));
+		memset(resultIndices, 0, sizeof(int)*(scanData->dataSize));
 		pResult->data_type = INT;
 		pResult->payload = resultIndices;
 		pGenHandle->generalized_column.column_pointer.result = pResult;
@@ -1203,6 +1203,10 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	//Each operator gets 5% of the page size for result
         	size_t system_page_size = sysconf(_SC_PAGESIZE);
         	size_t page_size = system_page_size - (numOperators*system_page_size*0.05);
+        	while(page_size <= 0){
+        		system_page_size <<=4;
+        		page_size = system_page_size;
+        	}
         	size_t num_pages = (columnSize<<2)/page_size;
         	//data_rem is #column elements for the last page
         	size_t data_rem = ((columnSize<<2) % page_size)>>2;
@@ -1235,6 +1239,13 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 	    			strcpy(pGenHandle->name, pComp->handle);
 	    			context->chandles_in_use++;
 	        		pGenHandle->generalized_column.column_type = RESULT;
+	        		Result* pResult = (Result*)malloc(sizeof(Result));
+					memset(pResult, 0, sizeof(Result));
+					int* resultIndices = (int*)malloc(sizeof(int) * page_size * 0.5);
+					memset(resultIndices, 0, sizeof(int)*page_size*0.5 );
+					pResult->data_type = INT;
+					pResult->payload = resultIndices;
+					pGenHandle->generalized_column.column_pointer.result = pResult;
 	    		}
 
 	    		pScanData->pGenHandle = pGenHandle;
@@ -1264,15 +1275,16 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 
         	gettimeofday(&stop, NULL);
             double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
-            printf("Batch Execution for numQueries = %d took %f seconds\n", numOperators, secs);
+            //printf("Batch Execution for numQueries = %d took %f seconds\n", numOperators, secs);
 
-            threadpool_destroy(thpool);
+            
             free(pQueryScanDataArr);
             for(j=0; j<numOperators; j++){
             	SelectOperator* pSelOperator = &(pSelOperators[j]);
         		Comparator* pComp = pSelOperator->comparator;
         		if(pComp != NULL) {
-        			free(pComp->gen_col);
+        			if(pComp->gen_col != NULL)
+        				free(pComp->gen_col);
         			free(pComp->handle);
         			free(pComp);
         		}
@@ -1283,6 +1295,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
             	free(context->batchOperator->selOperators);
             	free(context->batchOperator);
             }
+            threadpool_destroy(thpool);
         	break;
         }
         case JOIN:
