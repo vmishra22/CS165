@@ -118,8 +118,8 @@ void handle_client(int client_socket) {
             recv_message.payload = recv_buffer;
             recv_message.payload[recv_message.length] = '\0';
 
-            struct timeval stop, start;
-            gettimeofday(&start, NULL); 
+            // struct timeval stop, start;
+            // gettimeofday(&start, NULL); 
 
             // 1. Parse command
             DbOperator* query = NULL;
@@ -133,9 +133,9 @@ void handle_client(int client_socket) {
             //Execute db operator
             execute_DbOperator(query, &payload_to_client);
 
-            gettimeofday(&stop, NULL);
-            double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
-            printf("Execution took %f seconds\n", secs);
+            // gettimeofday(&stop, NULL);
+            // double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
+            // printf("Execution took %f seconds\n", secs);
 
             char retMessage[MAX_RESPONSE_SIZE];
             strcpy(retMessage, payload_to_client);

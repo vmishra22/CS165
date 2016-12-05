@@ -115,30 +115,32 @@ void readdata(void* node, void* prevNode, int levels, FILE* fp, leafNode** pLeaf
 	if(((leafNode*)node)->isLeaf)
 		isLeafNode=true;
 
+	size_t readval = 0;
 	if(isLeafNode)
 	{
 		leafNode* lNode = (leafNode*)node;
-		fread(&(lNode->isLeaf), sizeof(bool), 1, fp);
-		fread(&(lNode->num_keys), sizeof(int), 1, fp);
-		fread(&(lNode->node_id), sizeof(uuid_t), 1, fp);
+		readval = fread(&(lNode->isLeaf), sizeof(bool), 1, fp);
+		readval = fread(&(lNode->num_keys), sizeof(int), 1, fp);
+		readval = fread(&(lNode->node_id), sizeof(uuid_t), 1, fp);
 		long nextNodeOffset = 0;
-		fread(&(nextNodeOffset), sizeof(long), 1, fp);
+		readval = fread(&(nextNodeOffset), sizeof(long), 1, fp);
 		lNode->nextLeafNode = NULL;
 		
 		long parentNodeOffset = 0;
-		fread(&(parentNodeOffset), sizeof(long), 1, fp);
+		readval = fread(&(parentNodeOffset), sizeof(long), 1, fp);
 		if(prevNode != NULL)
 			lNode->parent = prevNode;
 	
-		fread(lNode->keys, sizeof(int), lNode->num_keys, fp );
-		fread(lNode->pos, sizeof(int), lNode->num_keys, fp );
+		readval = fread(lNode->keys, sizeof(int), lNode->num_keys, fp );
+		readval = fread(lNode->pos, sizeof(int), lNode->num_keys, fp );
+		(void)readval;
 	}else{
 		internalNode* iNode = (internalNode*)node;
-		fread(&(iNode->isLeaf), sizeof(bool), 1, fp);
-		fread(&(iNode->num_keys), sizeof(int), 1, fp);
-		fread(&(iNode->node_id), sizeof(uuid_t), 1, fp);
+		readval = fread(&(iNode->isLeaf), sizeof(bool), 1, fp);
+		readval = fread(&(iNode->num_keys), sizeof(int), 1, fp);
+		readval = fread(&(iNode->node_id), sizeof(uuid_t), 1, fp);
 		long parentNodeOffset = 0;
-		fread(&(parentNodeOffset), sizeof(long), 1, fp);
+		readval = fread(&(parentNodeOffset), sizeof(long), 1, fp);
 		if(prevNode != NULL)
 			iNode->parent = prevNode;
 		
@@ -146,11 +148,11 @@ void readdata(void* node, void* prevNode, int levels, FILE* fp, leafNode** pLeaf
 		if(levels-1 == 0)
 			childLeafNodes = true;
 
-		fread(iNode->keys, sizeof(int), iNode->num_keys, fp );
+		readval = fread(iNode->keys, sizeof(int), iNode->num_keys, fp );
 		if(childLeafNodes){
 			for (i = 0; i <= iNode->num_keys; i++){
 				long childNodeOffset = 0;
-				fread(&(childNodeOffset), sizeof(long), 1, fp);
+				readval = fread(&(childNodeOffset), sizeof(long), 1, fp);
 				long curr_pos = ftell(fp);
 				leafNode* lChildNode = make_leafN();
 				iNode->pointers[i] = lChildNode;
@@ -179,7 +181,7 @@ void readdata(void* node, void* prevNode, int levels, FILE* fp, leafNode** pLeaf
 		}else{
 			for (i = 0; i <= iNode->num_keys; i++){
 				long childNodeOffset = 0;
-				fread(&(childNodeOffset), sizeof(long), 1, fp);
+				readval = fread(&(childNodeOffset), sizeof(long), 1, fp);
 				long curr_pos = ftell(fp);
 				internalNode* iChildNode = make_nodeN();
 				iNode->pointers[i] = iChildNode;
@@ -189,6 +191,7 @@ void readdata(void* node, void* prevNode, int levels, FILE* fp, leafNode** pLeaf
 			}
 		}
 	}
+	(void)readval;
 }
 
 treeRoot* read_tree_from_file(FILE* fp){
@@ -198,26 +201,28 @@ treeRoot* read_tree_from_file(FILE* fp){
 	treeRoot* root = (treeRoot*)malloc(sizeof(treeRoot));
 	memset(root, 0, sizeof(treeRoot));
 
+	size_t readval = 0;
 	long rootNodeOffset = 0;
-	fread(&(root->isLeaf), sizeof(bool), 1, fp);
-	fread(&(root->levels), sizeof(int), 1, fp);
-	fread(&(root->num_nodes), sizeof(int), 1, fp);
+	readval = fread(&(root->isLeaf), sizeof(bool), 1, fp);
+	readval = fread(&(root->levels), sizeof(int), 1, fp);
+	readval = fread(&(root->num_nodes), sizeof(int), 1, fp);
 
 	leafNode* leafConnection = NULL;
 	if(root->isLeaf){
-		fread(&(rootNodeOffset), sizeof(long), 1, fp);
+		readval = fread(&(rootNodeOffset), sizeof(long), 1, fp);
 		fseek(fp, rootNodeOffset, SEEK_SET);
 		leafNode* lNode = make_leafN();
 		root->lNode = lNode;
 		readdata(root->lNode, NULL, root->levels, fp, &leafConnection);
 	}else{
-		fread(&(rootNodeOffset), sizeof(long), 1, fp);
+		readval = fread(&(rootNodeOffset), sizeof(long), 1, fp);
 		fseek(fp, rootNodeOffset, SEEK_SET);
 		internalNode* iNode = make_nodeN();
 		root->iNode = iNode;
 		readdata(root->iNode, NULL, root->levels, fp, &leafConnection);
 	}
 
+	(void)readval;
 	return root;
 }
 

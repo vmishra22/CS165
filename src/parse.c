@@ -981,13 +981,11 @@ DbOperator* parse_select(char* query_command, char* handle, ClientContext* conte
 
         DbOperator* dbo = NULL;
         if(context->batchOperator != NULL){
-            SelectOperator* selOperator = (SelectOperator*)malloc(sizeof(SelectOperator));
-            memset(selOperator, 0, sizeof(SelectOperator));
-            selOperator->table = scan_table;
-            selOperator->comparator = comparator;
             int selOperators = context->batchOperator->numSelOperators;
-            context->batchOperator->selOperators[selOperators++] = *selOperator;
+            SelectOperator* selOperator = &(context->batchOperator->selOperators[selOperators++]);
             context->batchOperator->numSelOperators = selOperators;
+            selOperator->table = scan_table;
+            selOperator->comparator = comparator;            
         }else{
             dbo = malloc(sizeof(DbOperator));
             dbo->type = SELECT;
@@ -1062,7 +1060,8 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         query_command += 11;
         BatchOperator* batchOperator = (BatchOperator*)malloc(sizeof(BatchOperator));
         memset(batchOperator, 0, sizeof(BatchOperator));
-        batchOperator->selOperators = (SelectOperator*)malloc(10*sizeof(SelectOperator));
+        batchOperator->selOperators = (SelectOperator*)malloc(30*sizeof(SelectOperator));
+        memset(batchOperator->selOperators, 0, 30*sizeof(SelectOperator));
         context->batchOperator = batchOperator;
 
     }else if (strncmp(query_command, "batch_execute", 13) == 0){

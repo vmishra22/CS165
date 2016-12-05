@@ -1180,6 +1180,9 @@ void execute_DbOperator(DbOperator* query, char** msg) {
             break;
         case BATCH:
         {
+        	struct timeval stop, start;
+            gettimeofday(&start, NULL); 
+
         	BatchOperator* pOperator = context->batchOperator;
         	int numOperators = pOperator->numSelOperators;
         	SelectOperator* pSelOperators = pOperator->selOperators;
@@ -1258,7 +1261,28 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         		threadpool_wait(thpool);
         	}
         	
-        
+
+        	gettimeofday(&stop, NULL);
+            double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
+            printf("Batch Execution for numQueries = %d took %f seconds\n", numOperators, secs);
+
+            threadpool_destroy(thpool);
+            free(pQueryScanDataArr);
+            for(j=0; j<numOperators; j++){
+            	SelectOperator* pSelOperator = &(pSelOperators[j]);
+        		Comparator* pComp = pSelOperator->comparator;
+        		if(pComp != NULL) {
+        			free(pComp->gen_col);
+        			free(pComp->handle);
+        			free(pComp);
+        		}
+            }
+            
+            if(context->batchOperator != NULL)
+            {
+            	free(context->batchOperator->selOperators);
+            	free(context->batchOperator);
+            }
         	break;
         }
         case JOIN:
