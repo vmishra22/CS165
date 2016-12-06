@@ -1180,8 +1180,8 @@ void execute_DbOperator(DbOperator* query, char** msg) {
             break;
         case BATCH:
         {
-        	struct timeval stop, start;
-            gettimeofday(&start, NULL); 
+        	// struct timeval stop, start;
+         //    gettimeofday(&start, NULL); 
 
         	BatchOperator* pOperator = context->batchOperator;
         	int numOperators = pOperator->numSelOperators;
@@ -1241,7 +1241,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 	        		pGenHandle->generalized_column.column_type = RESULT;
 	        		Result* pResult = (Result*)malloc(sizeof(Result));
 					memset(pResult, 0, sizeof(Result));
-					size_t memSize =  sizeof(int) * page_size*0.2;
+					size_t memSize =  sizeof(int) * page_size;
 					int* resultIndices = (int*)malloc(memSize);
 					memset(resultIndices, 0, memSize);
 					pResult->data_type = INT;
@@ -1274,9 +1274,9 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	}
         	
 
-        	gettimeofday(&stop, NULL);
-            double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
-            printf("Batch Execution for numQueries = %d took %f seconds\n", numOperators, secs);
+        	// gettimeofday(&stop, NULL);
+         //    double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
+         //    printf("Batch Execution for numQueries = %d took %f seconds\n", numOperators, secs);
 
             
             free(pQueryScanDataArr);

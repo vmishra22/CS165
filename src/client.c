@@ -491,12 +491,12 @@ int main(void)
         if (send_message.length > 1) {
 
             if(strncmp(send_message.payload, "load", 4) == 0){
-                struct timeval stop, start;
-                gettimeofday(&start, NULL); 
+                // struct timeval stop, start;
+                // gettimeofday(&start, NULL); 
                 parse_load_query(send_message.payload, client_socket);
-                gettimeofday(&stop, NULL);
-                double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
-                printf("Load Execution took %f seconds\n", secs);
+                // gettimeofday(&stop, NULL);
+                // double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
+                // printf("Load Execution took %f seconds\n", secs);
             }
             else{
                 // Send the message_header, which tells server payload size
