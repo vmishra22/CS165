@@ -3,7 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "utils.h"
-#include "thpool.h"
+#include "threadpool.h"
 #include "hash_table.h"
 
 
@@ -924,19 +924,6 @@ void computeNestedLoopJoinPositions(Result* pResultOuter, Result* pResultInner, 
 		*num_positions = k;
 }
 
-// void update_val_index(DbOperator* query){
-// 	table = query->operator_fields.update_operator.table;
-//     //size_t numColumns = table->col_count;
-//     column = query->operator_fields.update_operator.column;
-//     GeneralizedColumn* pGenResColumn = query->operator_fields.update_operator.gen_res_col;
-//     int update_val = query->operator_fields.update_operator.update_val;
-
-//     Result* pResult = pGenResColumn->column_pointer.result;
-//     size_t num_tuples = pResult->num_tuples;
-//     int* selectPos = (int*)(pResult->payload);
-
-
-// }
 /** execute_DbOperator takes as input the DbOperator and executes the query.
  **/
 void execute_DbOperator(DbOperator* query, char** msg) {

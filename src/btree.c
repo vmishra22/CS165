@@ -428,8 +428,6 @@ int cut( int length ) {
 		return length/2 + 1;
 }
 
-
-// INSERTION
 //make a new internal node
 internalNode* make_nodeN() {
 	size_t system_page_size = sysconf(_SC_PAGESIZE);
