@@ -1,3 +1,9 @@
+//This Btree implementation has been implemented with the suggestions from the following sources:
+//http://www.cs.yale.edu/homes/aspnes/pinewiki/BTrees.html
+//https://stuff.mit.edu/afs/sipb/user/gamadrid/nscript/btree.c
+//http://www.amittai.com/prose/bpt.c
+//https://inst.eecs.berkeley.edu/~cs186/fa04/btree_html/
+
 #include "btree.h"
 #include <string.h>
 #include <unistd.h>

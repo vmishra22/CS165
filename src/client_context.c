@@ -1168,8 +1168,8 @@ void execute_DbOperator(DbOperator* query, char** msg) {
             break;
         case BATCH:
         {
-        	struct timeval stop, start;
-            gettimeofday(&start, NULL); 
+        	// struct timeval stop, start;
+         //    gettimeofday(&start, NULL); 
 
         	BatchOperator* pOperator = context->batchOperator;
         	int numOperators = pOperator->numSelOperators;
@@ -1263,9 +1263,9 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	}
         	
 
-        	gettimeofday(&stop, NULL);
-            double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
-            printf("Batch Execution for numQueries = %d took %f seconds\n", numOperators, secs);
+        	// gettimeofday(&stop, NULL);
+         //    double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
+         //    printf("Batch Execution for numQueries = %d took %f seconds\n", numOperators, secs);
 
             
             free(pQueryScanDataArr);
@@ -1383,8 +1383,8 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         case SELECT:
         {
         	//SINGLE SELECT PERFORMANCE CHECK
-        	struct timeval stop, start;
-        	gettimeofday(&start, NULL); 
+        	// struct timeval stop, start;
+        	// gettimeofday(&start, NULL); 
 
         	//FOR BATCH PERFORMNACE CHECK
         	// if(num_select_run == 0)
@@ -1444,10 +1444,10 @@ void execute_DbOperator(DbOperator* query, char** msg) {
     		free(comparator);
 
     		num_select_run =1;
-			gettimeofday(&stop, NULL);
-            double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 +
-            						 (double)(stop.tv_sec - start.tv_sec); 
-            printf("Serial Execution for numQueries = %d took %f seconds\n", num_select_run, secs);
+			// gettimeofday(&stop, NULL);
+   //          double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 +
+   //          						 (double)(stop.tv_sec - start.tv_sec); 
+   //          printf("Serial Execution for numQueries = %d took %f seconds\n", num_select_run, secs);
 
     		//TEST RUN DATA for Batch
         	// num_select_run++;
