@@ -1187,10 +1187,11 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	size_t columnSize = table->table_length;
         	int* data = column->data;
 
+        	int numCPU = sysconf(_SC_NPROCESSORS_ONLN);
         	//divide the data into page sizes
         	//Each operator gets 5% of the page size for result
         	size_t system_page_size = sysconf(_SC_PAGESIZE);
-        	int page_size = (int)system_page_size - (4*(int)system_page_size*0.05);
+        	int page_size = (int)system_page_size - (numCPU*(int)system_page_size*0.05);
         	while(page_size <= 0){
         		page_size = (int)system_page_size;
         		// system_page_size<<=2;
@@ -1204,7 +1205,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	num_pages++; //at least 1 page is required
 
         	//create the thread pool with #threads same as #operators.
-        	threadpool* thpool = threadpool_init(4);
+        	threadpool* thpool = threadpool_init(numCPU);
 
         	//ThreadScanData is argument for a thread. Each array element would correspond to a thread.
         	ThreadScanData* pQueryScanDataArr = (ThreadScanData*) malloc(sizeof(ThreadScanData) * numOperators);
