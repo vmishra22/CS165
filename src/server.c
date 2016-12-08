@@ -70,7 +70,7 @@ bool shutdown_requested = false;
     ClientContext* client_context = (ClientContext*)malloc(sizeof(ClientContext));
 
     memset(client_context, 0, sizeof(ClientContext));
-    client_context->chandle_slots = 55;
+    client_context->chandle_slots = 110;
     client_context->chandles_in_use = 0;
     GeneralizedColumnHandle* pColumnHandle = 
         (GeneralizedColumnHandle*) malloc(sizeof(GeneralizedColumnHandle)*(client_context->chandle_slots));

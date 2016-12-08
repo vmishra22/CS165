@@ -28,6 +28,7 @@ SOFTWARE.
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <sys/time.h>
 #include "common.h"
 
 
@@ -339,6 +340,8 @@ typedef struct ClientContext {
     int chandles_in_use;
     int chandle_slots;
     BatchOperator* batchOperator;
+    struct timeval stop;
+    struct timeval start;
 } ClientContext;
 
 /*

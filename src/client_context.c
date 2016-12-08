@@ -6,6 +6,7 @@
 #include "threadpool.h"
 #include "hash_table.h"
 
+static int num_select_run = 0; 
 
 Table* lookup_table(char *name) {
 	size_t i;
@@ -538,7 +539,7 @@ void createTreeClusteredColumnIndex(Table* table, Column* column){
 	else 
 		root = pIndex->dataIndex;
 	for(i=0; i<columnSize; i++){
-		root = insert_in_treeN(root, baseData[i], i);
+		root = insert_key_in_tree(root, baseData[i], i);
 	}
 	pIndex->dataIndex = root;
 	if(columnSize >= pIndex->index_data_capacity){
@@ -575,7 +576,7 @@ void createTreeColumnUnClusteredIndex(Table* table, Column* column){
 		dataRecord* lColTuple = &(colTuplesArr[i]);
 		int basePos = lColTuple->pos;
 		int value = lColTuple->val;
-		root = insert_in_treeN(root, value, basePos);
+		root = insert_key_in_tree(root, value, basePos);
 	}
 	pIndex->dataIndex = root;
 	if(columnSize >= pIndex->index_data_capacity){
@@ -717,7 +718,7 @@ void update_column_index(Table* table, int* values, bool updateVal){
 				int value = values[idx];
 
 				if(!updateVal){
-					root = insert_in_treeN(root, value, basePos);
+					root = insert_key_in_tree(root, value, basePos);
 				}else{
 					//find_and_update_position(root, value, basePos);
 				}
@@ -1167,8 +1168,8 @@ void execute_DbOperator(DbOperator* query, char** msg) {
             break;
         case BATCH:
         {
-        	// struct timeval stop, start;
-         //    gettimeofday(&start, NULL); 
+        	struct timeval stop, start;
+            gettimeofday(&start, NULL); 
 
         	BatchOperator* pOperator = context->batchOperator;
         	int numOperators = pOperator->numSelOperators;
@@ -1189,10 +1190,11 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	//divide the data into page sizes
         	//Each operator gets 5% of the page size for result
         	size_t system_page_size = sysconf(_SC_PAGESIZE);
-        	int page_size = (int)system_page_size - (numOperators*(int)system_page_size*0.05);
+        	int page_size = (int)system_page_size - (4*(int)system_page_size*0.05);
         	while(page_size <= 0){
-        		system_page_size<<=2;
-        		page_size = (int)system_page_size - (numOperators*(int)system_page_size*0.01);
+        		page_size = (int)system_page_size;
+        		// system_page_size<<=2;
+        		// page_size = (int)system_page_size - (numOperators*(int)system_page_size*0.01);
         	}
         	size_t num_pages = (columnSize<<2)/page_size;
         	//data_rem is #column elements for the last page
@@ -1202,7 +1204,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	num_pages++; //at least 1 page is required
 
         	//create the thread pool with #threads same as #operators.
-        	threadpool* thpool = threadpool_init(numOperators);
+        	threadpool* thpool = threadpool_init(4);
 
         	//ThreadScanData is argument for a thread. Each array element would correspond to a thread.
         	ThreadScanData* pQueryScanDataArr = (ThreadScanData*) malloc(sizeof(ThreadScanData) * numOperators);
@@ -1225,7 +1227,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 	    			pGenHandle = &(context->chandle_table[context->chandles_in_use]);
 	    			strcpy(pGenHandle->name, pComp->handle);
 	    			context->chandles_in_use++;
-	        		pGenHandle->generalized_column.column_type = RESULT;
+	         		pGenHandle->generalized_column.column_type = RESULT;
 	        		Result* pResult = (Result*)malloc(sizeof(Result));
 					memset(pResult, 0, sizeof(Result));
 					size_t memSize =  sizeof(int) * page_size;
@@ -1261,9 +1263,9 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	}
         	
 
-        	// gettimeofday(&stop, NULL);
-         //    double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
-         //    printf("Batch Execution for numQueries = %d took %f seconds\n", numOperators, secs);
+        	gettimeofday(&stop, NULL);
+            double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); 
+            printf("Batch Execution for numQueries = %d took %f seconds\n", numOperators, secs);
 
             
             free(pQueryScanDataArr);
@@ -1380,6 +1382,15 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         }
         case SELECT:
         {
+        	//SINGLE SELECT PERFORMANCE CHECK
+        	struct timeval stop, start;
+        	gettimeofday(&start, NULL); 
+
+        	//FOR BATCH PERFORMNACE CHECK
+        	// if(num_select_run == 0)
+        	// {
+        	// 	gettimeofday(&(context->start), NULL); 
+        	// }
         	comparator = query->operator_fields.select_operator.comparator;
         	table = query->operator_fields.select_operator.table;
         	size_t nInputCols = comparator->numInputCols;
@@ -1431,7 +1442,22 @@ void execute_DbOperator(DbOperator* query, char** msg) {
  			free(comparator->handle);
     		free(pGenColumn);
     		free(comparator);
-        	
+
+    		num_select_run =1;
+			gettimeofday(&stop, NULL);
+            double secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 +
+            						 (double)(stop.tv_sec - start.tv_sec); 
+            printf("Serial Execution for numQueries = %d took %f seconds\n", num_select_run, secs);
+
+    		//TEST RUN DATA for Batch
+        	// num_select_run++;
+        	// if(num_select_run == 70){
+        	// 	gettimeofday(&(context->stop), NULL);
+	        //     double secs = (double)((context->stop).tv_usec - (context->start).tv_usec) / 1000000 +
+	        //     						 (double)((context->stop).tv_sec - (context->start).tv_sec); 
+	        //     printf("Serial Execution for numQueries = %d took %f seconds\n", num_select_run, secs);
+	        //     num_select_run = 0;
+        	// }
             break;
         }
 

@@ -1060,8 +1060,8 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         query_command += 11;
         BatchOperator* batchOperator = (BatchOperator*)malloc(sizeof(BatchOperator));
         memset(batchOperator, 0, sizeof(BatchOperator));
-        batchOperator->selOperators = (SelectOperator*)malloc(50*sizeof(SelectOperator));
-        memset(batchOperator->selOperators, 0, 50*sizeof(SelectOperator));
+        batchOperator->selOperators = (SelectOperator*)malloc(110*sizeof(SelectOperator));
+        memset(batchOperator->selOperators, 0, 110*sizeof(SelectOperator));
         context->batchOperator = batchOperator;
 
     }else if (strncmp(query_command, "batch_execute", 13) == 0){
