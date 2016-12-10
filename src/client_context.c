@@ -1528,11 +1528,11 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 					pResultNew->num_tuples = k;
 					pResultNew->data_type = INT;
 	        		pGenHandleNew->generalized_column.column_pointer.result = pResultNew;
-	        		if(column->data != NULL)
-	        		{
-        				free(column->data);
-        				column->data = NULL;
-	        		}
+	        		// if(column->data != NULL)
+	        		// {
+        			// 	free(column->data);
+        			// 	column->data = NULL;
+	        		// }
         			free(query->operator_fields.fetch_operator.handle);
         			free(query->operator_fields.fetch_operator.targetVecHandle);
         			break;
