@@ -715,9 +715,8 @@ void update_column_index(Table* table, int* values, bool updateVal){
 				}
 				
 				int basePos = columnSize-1;
-				int value = values[idx];
-
 				if(!updateVal){
+					int value = values[idx];
 					root = insert_key_in_tree(root, value, basePos);
 				}else{
 					//find_and_update_position(root, value, basePos);
@@ -1112,17 +1111,19 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 					ColumnIndex* pIndex = column->index;
 					dataRecord* colTuplesArr = pIndex->tuples;
 					for(i=(size_t)(pResult->lower_idx); i<=(size_t)(pResult->upper_idx); i++){
-						int value = (colTuplesArr[i]).val;
+						//int value = (colTuplesArr[i]).val;
 						int pos = (colTuplesArr[i]).pos;
      
-		                column->data[pos] = (1<<30);             			
+		                column->data[pos] = -(1<<30);       
+		                dataRecord* pTupleRecord = &(pIndex->tuples[i]);
+                		pTupleRecord->val = -(1<<30);      			
 
-	                	if(pIndex->indexType == BTREE){
-	                		delete_key(pIndex->dataIndex, value);
-	                	}else{
-	                		dataRecord* pTupleRecord = &(pIndex->tuples[i]);
-	                		pTupleRecord->val = (1<<30);
-	                	}
+	                	// if(pIndex->indexType == BTREE){
+	                	// 	delete_key(pIndex->dataIndex, value);
+	                	// }else{
+	                	// 	dataRecord* pTupleRecord = &(pIndex->tuples[i]);
+	                	// 	pTupleRecord->val = -(1<<30);
+	                	// }
 	                }	
 				}
 			}else{
@@ -1132,7 +1133,7 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 					for(j=0; j<numColumns; j++){
 						column = &(table->columns[j]);
 						for(i=0; i<(pResult->num_tuples); i++){
-	    					column->data[pPayload[i]] = (1<<30); 
+	    					column->data[pPayload[i]] = -(1<<30); 
 	    				}
 	    			}
 	    			for(j=0; j<numColumns; j++){
@@ -1143,14 +1144,16 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 							for(i=0; i<(pResult->num_tuples); i++){
 								int pos = pPayload[i];
 								for(k=0; k<(int)columnSize; k++){
+									dataRecord* pDataRecord = &(pIndex->tuples[k]);
 									if(colTuplesArr[k].pos == pos){
-										if(pIndex->indexType == BTREE){
-		                					delete_key(pIndex->dataIndex, colTuplesArr[k].val);
-										}
-	                					else{
-											dataRecord* pTupleRecord = &(pIndex->tuples[k]);
-			                				pTupleRecord->val = (1<<30);
-		                				}
+										pDataRecord->val = -(1<<30);
+										// if(pIndex->indexType == BTREE){
+		        //         					delete_key(pIndex->dataIndex, colTuplesArr[k].val);
+										// }
+	         //        					else{
+										// 	dataRecord* pTupleRecord = &(pIndex->tuples[k]);
+			       //          				pTupleRecord->val = -(1<<30);
+		        //         				}
 		                				break;
 									}
 								}
@@ -1159,6 +1162,8 @@ void execute_DbOperator(DbOperator* query, char** msg) {
 	    			}
 				}
 			}
+
+			update_column_index(table, NULL, true);
 
         	break;
         }
@@ -1577,8 +1582,15 @@ void execute_DbOperator(DbOperator* query, char** msg) {
         	for(j=0; j<num_tuples; j++){
         		for(k=0; k<numHandles; k++){
         			char str[20];
+
         			if(hTypes[k] == INT)
+        			{
+        				// if(valuesIntVec[iIndex++][j] == -(1<<30))
+        				// 	continue;
         				sprintf(str, "%d", valuesIntVec[iIndex++][j]);
+        				if(strcmp(str, "-1073741824") == 0)
+        					continue;
+        			}
         			else if(hTypes[k] == DOUBLE)
         				sprintf(str, "%.2f", valuesDoubleVec[fIndex++][j]);
         			else if(hTypes[k] == LONG)
