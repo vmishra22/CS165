@@ -1,1 +1,5 @@
+The goal of the project is to design and build a main-memory optimized column-store.
 
+The project includes work on storage methods such as arrays for plain storage and B-trees for clustered or secondary indexes. It also includes work on access methods such as fast scans that are optimized for modern hardware and can utilize properties such as CPU prefetching and multi-cores. It provides main-memory optimized designs and implementation for several core operators of a db system: select, fetch, join, aggregations and basic math. In addition, the project includes work on updates and efficient execution of workloads that include multiple concurrent read queries using scan sharing.
+
+We have a data system that gets as input an intermediate language, i.e., a language used by db optimizers to describe a physical query plan. The system will be able to run complete select-project-join queries and it will be at least an order of magnitude faster than traditional row-store database systems in analytical workloads.
